@@ -41,11 +41,11 @@
 // Use tabs "Config..." to configure OnStep to your requirements
 
 // Firmware version ----------------------------------------------------------------------------------------------------------------
-#define FirmwareName                "On-Step"
+#define FirmwareName                "On-Step-UMi17-V1.0.0"
 #define FirmwareVersionMajor        10
 #define FirmwareVersionMinor        23     // minor version 00 to 99
 #define FirmwareVersionPatch        "o"    // for example major.minor patch: 10.03c
-#define FirmwareVersionConfig       6      // internal, for tracking configuration file changes
+#define FirmwareVersionConfig       7      // internal, for tracking configuration file changes
 
 #include "src/Common.h"
 NVS nv;
