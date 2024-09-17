@@ -1,6 +1,7 @@
 // -----------------------------------------------------------------------------------
 // Auxiliary Features
 
+#include "../mount/Mount.h"
 #include "Features.h"
 
 #ifdef FEATURES_PRESENT
@@ -20,6 +21,14 @@ void Features::init() {
       if (device[i].value < 0 || device[i].value > 255) device[i].value = 0;
 
     if (device[i].purpose == SWITCH || device[i].purpose == MOMENTARY_SWITCH || device[i].purpose == HIDDEN_SWITCH) {
+      if (device[i].name == "ElecHoming") {
+        device[i].value = mount.electronicHoming;
+      }
+
+      if (device[i].name == "AutoTrack") {
+        device[i].value = mount.autoTracking;
+      }
+
       pinModeEx(device[i].pin, OUTPUT);
       digitalWriteEx(device[i].pin, device[i].value == device[i].active);
       if (device[i].purpose == MOMENTARY_SWITCH && device[i].value) momentarySwitchTime[i] = 50;

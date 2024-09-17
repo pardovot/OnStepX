@@ -36,6 +36,7 @@
 #define AUX4_PIN                22               // Home SW for Axis2, or I2C SCL
 #define AUX7_PIN                39               // Limit SW, PPS, etc.
 #define AUX8_PIN                25               // 1-Wire, Status LED, Reticle LED, Tone, etc.
+#define AUX9_PIN                19               // Buzzer (Tone).
 
 // Misc. pins
 #ifndef ONE_WIRE_PIN
@@ -62,7 +63,7 @@
 
 // For a piezo buzzer
 #ifndef STATUS_BUZZER_PIN
-  #define STATUS_BUZZER_PIN     AUX8_PIN         // Tone
+  #define STATUS_BUZZER_PIN     AUX9_PIN         // Tone
 #endif
 
 // The PPS pin is a 3.3V logic input, OnStep measures time between rising edges and adjusts the internal sidereal clock frequency

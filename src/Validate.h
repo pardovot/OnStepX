@@ -328,10 +328,6 @@
   #error "Configuration (Config.h): Setting MOUNT_COORDS_MEMORY unknown, use ON or OFF"
 #endif
 
-#if MOUNT_COORDS_MEMORY == ON && NV_ENDURANCE < NVE_VHIGH
-  #error "Configuration (Config.h): Setting MOUNT_COORDS_MEMORY requires a NV storage device with very high write endurance (FRAM)"
-#endif
-
 #if MOUNT_ENABLE_IN_STANDBY != ON && MOUNT_ENABLE_IN_STANDBY != OFF
   #error "Configuration (Config.h): Setting MOUNT_ENABLE_IN_STANDBY unknown, use ON or OFF"
 #endif
@@ -433,6 +429,14 @@
 // TRACKING BEHAVIOUR
 #if TRACK_AUTOSTART != ON && TRACK_AUTOSTART != OFF
   #error "Configuration (Config.h): Setting TRACK_AUTOSTART unknown, use OFF or ON."
+#endif
+
+#if TRACK_AUTOSTART_MEMORY != ON && TRACK_AUTOSTART_MEMORY != OFF
+  #error "Configuration (Config.h): Setting TRACK_AUTOSTART_MEMORY unknown, use OFF or ON."
+#endif
+
+#if TRACK_AUTOSTART_MEMORY == ON && GOTO_FEATURE == OFF
+  #error "Configuration (Config.h): Setting TRACK_AUTOSTART_MEMORY not available when GOTO_FEATURE is OFF."
 #endif
 
 #if TRACK_COMPENSATION_DEFAULT != OFF && (TRACK_COMPENSATION_DEFAULT < COMPENSATED_TRACKING_FIRST || TRACK_COMPENSATION_DEFAULT > COMPENSATED_TRACKING_LAST)

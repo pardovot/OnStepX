@@ -101,6 +101,20 @@ class Mount {
 
     MountSettings settings = {RC_DEFAULT, { 0, 0 }};
 
+    uint8_t electronicHoming = 1;  // 0 = disabled, 1 = enabled
+    uint8_t autoTracking = 0;      // 0 = disabled, 1 = enabled
+
+    uint16_t currentMemoryPosition = 0;
+
+    uint16_t findMemoryPosition();
+
+    uint8_t mountWriteDelay = 1; // Mount memory write delay in seconds, 1 = write every second.
+
+    float storedAxis1 = 0.0F;
+    float storedAxis2 = 0.0F;
+
+    byte marker = 0xCD; // 205 in hexa, arbitrary value to mark the current position in memory.
+
   private:
     // alternate tracking rate calculation method
     float ztr(float a);

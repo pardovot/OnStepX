@@ -18,6 +18,42 @@ bool Mount::command(char *reply, char *command, char *parameter, bool *supressFr
   char *conv_end;
   PrecisionMode precisionMode = PM_HIGH;
 
+  // :EH[n]#   Electronic Homing, 0=Off, 1=On
+  if (command[0] == 'E' && command[1] == 'H' && parameter[1] == 0) {
+    #if MOUNT_COORDS_MEMORY == ON
+      switch(parameter[0]) {
+        case '0': case '1':
+          sprintf(reply, "%d", mount.electronicHoming);
+          mount.electronicHoming = parameter[0] - '0';
+          nv.write(NV_ELECTRONIC_HOMING_BASE, mount.electronicHoming);
+          *numericReply = false;
+          *commandError = CE_NONE;
+          break;
+        default:
+          *commandError = CE_PARAM_RANGE;
+          break;
+      }
+    #endif
+  } else
+
+  // :AT[n]#   Auto Tracking, 0=Off, 1=On
+  if (command[0] == 'A' && command[1] == 'T' && parameter[1] == 0) {
+    #if TRACK_AUTOSTART_MEMORY == ON
+      switch(parameter[0]) {
+        case '0': case '1':
+          sprintf(reply, "%d", mount.autoTracking);
+          mount.autoTracking = parameter[0] - '0';
+          nv.write(NV_AUTO_TRACKING_BASE, mount.autoTracking);
+          *numericReply = false;
+          *commandError = CE_NONE;
+          break;
+        default:
+          *commandError = CE_PARAM_RANGE;
+          break;
+      }
+    #endif
+  } else
+
   if (command[0] == 'G') {
     // :GA#       Get Mount Altitude
     //            Returns: sDD*MM# or sDD*MM'SS# (based on precision setting)

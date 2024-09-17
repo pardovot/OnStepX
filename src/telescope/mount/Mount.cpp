@@ -24,6 +24,7 @@ inline void mountWrapper() { mount.poll(); }
 inline void autostartWrapper() { mount.autostartPostponed(); }
 
 void Mount::init() {
+  VLF("MSG: Mount, init()");
   // confirm the data structure size
   if (MountSettingsSize < sizeof(MountSettings)) { nv.initError = true; DL("ERR: Mount::init(), MountSettingsSize error"); }
 
@@ -31,10 +32,22 @@ void Mount::init() {
   if (!nv.hasValidKey()) {
     VLF("MSG: Mount, writing defaults to NV");
     nv.writeBytes(NV_MOUNT_SETTINGS_BASE, &settings, sizeof(MountSettings));
+    nv.write(NV_ELECTRONIC_HOMING_BASE, mount.electronicHoming);
+    nv.write(NV_AUTO_TRACKING_BASE, mount.autoTracking);
   }
 
   // read the settings
   nv.readBytes(NV_MOUNT_SETTINGS_BASE, &settings, sizeof(MountSettings));
+
+  #if MOUNT_COORDS_MEMORY == ON
+    mount.electronicHoming = nv.read(NV_ELECTRONIC_HOMING_BASE);
+    VF("MSG: Mount, restoring electronicHoming ("); V(mount.electronicHoming); VL(")");
+  #endif
+
+  #if TRACK_AUTOSTART_MEMORY == ON
+    mount.autoTracking = nv.read(NV_AUTO_TRACKING_BASE);
+    VF("MSG: Mount, restoring autoTracking ("); V(mount.autoTracking); VL(")");
+  #endif
 
   // get the main axes ready
   delay(100);
@@ -100,16 +113,24 @@ void Mount::begin() {
 
   // restore where we were pointing
   #if MOUNT_COORDS_MEMORY == ON
-    if (!goTo.absoluteEncodersPresent && park.state != PS_PARKED) {
-      int8_t lastMountType = nv.readC(NV_MOUNT_LAST_POSITION);
-      if (transform.mountType == lastMountType) {
-        VLF("MSG: Mount, reading last position");
-        float a1 = nv.readF(NV_MOUNT_LAST_POSITION + 1);
-        float a2 = nv.readF(NV_MOUNT_LAST_POSITION + 5);
+    if (!goTo.absoluteEncodersPresent && park.state != PS_PARKED && mount.electronicHoming == 1) {
+      VLF("MSG: Mount, reading last position");
+      mount.currentMemoryPosition = mount.findMemoryPosition();
+      VL("MSG: Mount - restore, currentMemoryPosition: "); VL(mount.currentMemoryPosition);
+      if (mount.currentMemoryPosition > NV_MOUNT_START && mount.currentMemoryPosition <= NV_MOUNT_END) {
+        float a1 = nv.readF(mount.currentMemoryPosition - 8);
+        float a2 = nv.readF(mount.currentMemoryPosition - 4);
+
+        mount.storedAxis1 = a1;
+        mount.storedAxis2 = a2;
+
         axis1.setInstrumentCoordinate(a1);
         axis2.setInstrumentCoordinate(a2);
-        if (!goTo.absoluteEncodersPresent) mount.syncFromOnStepToEncoders = true;
+
+        VF("MSG: Mount - restore, a1: "); VL(a1);
+        VF("MSG: Mount - restore, a2: "); VL(a2);
       }
+      if (!goTo.absoluteEncodersPresent) mount.syncFromOnStepToEncoders = true;
     }
   #endif
 
@@ -155,7 +176,7 @@ void Mount::autostartPostponed() {
 
   // handle the one case where this completes without the date/time available
   static bool autoTrackDone = false;
-  if (!autoTrackDone && TRACK_AUTOSTART == ON && transform.isEquatorial() && park.state != PS_PARKED && !home.settings.automaticAtBoot) {
+  if (!autoTrackDone && (TRACK_AUTOSTART == ON || mount.autoTracking == 1) && transform.isEquatorial() && park.state != PS_PARKED && !home.settings.automaticAtBoot) {
     VLF("MSG: Mount, autostart tracking sidereal");
     tracking(true);
     trackingRate = hzToSidereal(SIDEREAL_RATE_HZ);
@@ -198,7 +219,7 @@ void Mount::autostartPostponed() {
   if (home.state == HS_HOMING) return;
 
   // auto tracking
-  if (!autoTrackDone && TRACK_AUTOSTART == ON) {
+  if (!autoTrackDone && (TRACK_AUTOSTART == ON || mount.autoTracking == 1)) {
     VLF("MSG: Mount, autostart tracking sidereal");
     tracking(true);
     trackingRate = hzToSidereal(SIDEREAL_RATE_HZ);
@@ -296,10 +317,44 @@ void Mount::poll() {
 
   // keep track of where we are pointing
   #if MOUNT_COORDS_MEMORY == ON
-    if (!goTo.absoluteEncodersPresent) {
-      nv.write(NV_MOUNT_LAST_POSITION, transform.mountType);
-      nv.write(NV_MOUNT_LAST_POSITION + 1, (float)axis1.getInstrumentCoordinate());
-      nv.write(NV_MOUNT_LAST_POSITION + 5, (float)axis2.getInstrumentCoordinate());
+    static unsigned int mountCoordsWriteCount = 0;
+    if (!goTo.absoluteEncodersPresent && mount.electronicHoming == 1 && mountCoordsWriteCount++ % mount.mountWriteDelay == 0) {
+      float a1 = (float)axis1.getInstrumentCoordinate();
+      float a2 = (float)axis2.getInstrumentCoordinate();
+      VF("MSG: Mount MOUNT_COORDS_MEMORY, a1: "); VL(a1 * 10000);
+      VF("MSG: Mount MOUNT_COORDS_MEMORY, a2: "); VL(a2 * 10000);
+      VF("MSG: Mount MOUNT_COORDS_MEMORY, mount.storedAxis1: "); VL(mount.storedAxis1 * 10000);
+      VF("MSG: Mount MOUNT_COORDS_MEMORY, mount.storedAxis2: "); VL(mount.storedAxis2 * 10000);
+      bool didPositionChange = (a1 != mount.storedAxis1) || (a2 != mount.storedAxis2);
+
+      VF("MSG: Mount MOUNT_COORDS_MEMORY, didPositionChange: "); VL(didPositionChange);
+      if (didPositionChange) {
+        VF("MSG: Mount MOUNT_COORDS_MEMORY, initial currentMemoryPosition: "); VL(mount.currentMemoryPosition);
+        if (mount.currentMemoryPosition != NV_MOUNT_START) {
+          mount.currentMemoryPosition = mount.currentMemoryPosition - 7;
+        }
+
+        VF("MSG: Mount MOUNT_COORDS_MEMORY, new currentMemoryPosition: "); VL(mount.currentMemoryPosition);
+
+        if (mount.currentMemoryPosition + 8 > NV_MOUNT_END) {
+          VF("MSG: Mount MOUNT_COORDS_MEMORY, NV_MOUNT_END reached, resetting to NV_MOUNT_START: "); VL(NV_MOUNT_START);
+          nv.write(NV_MOUNT_END, 0x00);
+          mount.currentMemoryPosition = NV_MOUNT_START;
+        }
+
+        VF("MSG: Writing to position: "); V(mount.currentMemoryPosition); V(" value: "); VL(a1);
+        VF("MSG: Writing to position + 4: "); V(mount.currentMemoryPosition + 4); V(" value: "); VL(a2);
+        VF("MSG: Writing to position + 8: "); V(mount.currentMemoryPosition + 8); V(" value: "); VL(mount.marker);
+        nv.write(mount.currentMemoryPosition, (float)axis1.getInstrumentCoordinate());
+        nv.write(mount.currentMemoryPosition + 4, (float)axis2.getInstrumentCoordinate());
+        nv.write(mount.currentMemoryPosition + 8, mount.marker);
+
+        mount.currentMemoryPosition += 8;
+        VF("MSG: Mount, currentMemoryPosition + 8: "); VL(mount.currentMemoryPosition);
+
+        mount.storedAxis1 = a1;
+        mount.storedAxis2 = a2;
+      }
     }
   #endif
 
@@ -454,6 +509,16 @@ void Mount::updatePosition(CoordReturn coordReturn) {
     if (coordReturn == CR_MOUNT_ALT) transform.equToAlt(&current); else
     if (coordReturn == CR_MOUNT_HOR || coordReturn == CR_MOUNT_ALL) transform.equToHor(&current);
   }
+}
+
+// Find the current memory position for electronic homing
+uint16_t Mount::findMemoryPosition() {
+    for (int i = NV_MOUNT_START; i <= NV_MOUNT_END; i++) {
+    if (nv.read(i) == mount.marker) {
+      return i;
+    }
+  }
+  return NV_MOUNT_START;  // No marker found
 }
 
 Mount mount;

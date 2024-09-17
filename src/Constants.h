@@ -166,7 +166,9 @@
 #define NV_MOUNT_PARK_BASE          227    // bytes: 15  , 15
 #define NV_MOUNT_PEC_BASE           242    // bytes: 6   , 6
 #define NV_MOUNT_STATUS_BASE        248    // bytes: 1   , 1
-#define NV_MOUNT_LAST_POSITION      249    // bytes: 9   , 9
+
+#define NV_ELECTRONIC_HOMING_BASE   250    // bytes: 1   , 1
+#define NV_AUTO_TRACKING_BASE       251    // bytes: 1   , 1
 
 #define NV_ALIGN_MODEL_BASE         258    // bytes: 32  , 32
 #define NV_AXIS_SETTINGS_REVERT     290    // bytes: 2   , 2
@@ -178,3 +180,6 @@
 #define NV_TELESCOPE_SETTINGS_BASE  860    // bytes: 2   , 2
 
 #define NV_LAST                     861
+
+#define NV_MOUNT_START              (NV_LAST+1)    // (NV_LAST + 1) - 4095 for e-home
+#define NV_MOUNT_END                4095
