@@ -298,6 +298,8 @@ void Mount::update() {
     axis2.setFrequencyBase(0.0F);
   }
 
+  if (park.state == PS_PARKED) statusFlashMs = SF_PARKED;
+
   if (statusFlashMs != lastStatusFlashMs) {
     lastStatusFlashMs = statusFlashMs;
     mountStatus.flashRate(statusFlashMs);

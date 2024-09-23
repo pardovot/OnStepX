@@ -10,7 +10,8 @@
 #include "../../../lib/sound/Sound.h"
 
 #define SF_STOPPED 0
-#define SF_SLEWING 1
+#define SF_SLEWING 200
+#define SF_PARKED 1
 
 class Status {
   public:
