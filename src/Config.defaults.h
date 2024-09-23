@@ -2212,6 +2212,9 @@
 #ifndef FEATURE1_VALUE_DEFAULT
 #define FEATURE1_VALUE_DEFAULT        OFF                         // OUTPUT control pin default value/state ON, OFF, 0..255
 #endif
+#ifndef FEATURE1_VALUE_MEMORY
+#define FEATURE1_VALUE_MEMORY         OFF                         // ON remembers feature value across power cycles
+#endif
 #ifndef FEATURE1_ON_STATE
 #define FEATURE1_ON_STATE             HIGH                        // OUTPUT control pin ON (active) state
 #endif
@@ -2230,6 +2233,9 @@
 #endif
 #ifndef FEATURE2_VALUE_DEFAULT
 #define FEATURE2_VALUE_DEFAULT        OFF
+#endif
+#ifndef FEATURE2_VALUE_MEMORY
+#define FEATURE2_VALUE_MEMORY         OFF
 #endif
 #ifndef FEATURE2_ON_STATE
 #define FEATURE2_ON_STATE             HIGH
@@ -2250,6 +2256,9 @@
 #ifndef FEATURE3_VALUE_DEFAULT
 #define FEATURE3_VALUE_DEFAULT        OFF
 #endif
+#ifndef FEATURE3_VALUE_MEMORY
+#define FEATURE3_VALUE_MEMORY         OFF
+#endif
 #ifndef FEATURE3_ON_STATE
 #define FEATURE3_ON_STATE             HIGH
 #endif
@@ -2268,6 +2277,9 @@
 #endif
 #ifndef FEATURE4_VALUE_DEFAULT
 #define FEATURE4_VALUE_DEFAULT        OFF
+#endif
+#ifndef FEATURE4_VALUE_MEMORY
+#define FEATURE4_VALUE_MEMORY         OFF
 #endif
 #ifndef FEATURE4_ON_STATE
 #define FEATURE4_ON_STATE             HIGH
@@ -2288,6 +2300,9 @@
 #ifndef FEATURE5_VALUE_DEFAULT
 #define FEATURE5_VALUE_DEFAULT        OFF
 #endif
+#ifndef FEATURE5_VALUE_MEMORY
+#define FEATURE5_VALUE_MEMORY         OFF
+#endif
 #ifndef FEATURE5_ON_STATE
 #define FEATURE5_ON_STATE             HIGH
 #endif
@@ -2306,6 +2321,9 @@
 #endif
 #ifndef FEATURE6_VALUE_DEFAULT
 #define FEATURE6_VALUE_DEFAULT        OFF
+#endif
+#ifndef FEATURE6_VALUE_MEMORY
+#define FEATURE6_VALUE_MEMORY         OFF
 #endif
 #ifndef FEATURE6_ON_STATE
 #define FEATURE6_ON_STATE             HIGH
@@ -2326,6 +2344,9 @@
 #ifndef FEATURE7_VALUE_DEFAULT
 #define FEATURE7_VALUE_DEFAULT        OFF
 #endif
+#ifndef FEATURE7_VALUE_MEMORY
+#define FEATURE7_VALUE_MEMORY         OFF
+#endif
 #ifndef FEATURE7_ON_STATE
 #define FEATURE7_ON_STATE             HIGH
 #endif
@@ -2344,6 +2365,9 @@
 #endif
 #ifndef FEATURE8_VALUE_DEFAULT
 #define FEATURE8_VALUE_DEFAULT        OFF
+#endif
+#ifndef FEATURE8_VALUE_MEMORY
+#define FEATURE8_VALUE_MEMORY         OFF
 #endif
 #ifndef FEATURE8_ON_STATE
 #define FEATURE8_ON_STATE             HIGH
