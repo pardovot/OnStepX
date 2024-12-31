@@ -780,6 +780,9 @@
 #ifndef TRACK_AUTOSTART
 #define TRACK_AUTOSTART               OFF
 #endif
+#ifndef TRACK_AUTOSTART_MEMORY
+#define TRACK_AUTOSTART_MEMORY        OFF
+#endif
 #ifndef TRACK_COMPENSATION_DEFAULT
 #define TRACK_COMPENSATION_DEFAULT    OFF
 #endif

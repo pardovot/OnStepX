@@ -101,6 +101,9 @@ class Mount {
 
     MountSettings settings = {RC_DEFAULT, { 0, 0 }};
 
+    uint8_t electronicHoming = 1;  // 0 = disabled, 1 = enabled
+    uint8_t autoTracking = 0;      // 0 = disabled, 1 = enabled
+
   private:
     // alternate tracking rate calculation method
     float ztr(float a);

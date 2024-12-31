@@ -435,6 +435,14 @@
   #error "Configuration (Config.h): Setting TRACK_AUTOSTART unknown, use OFF or ON."
 #endif
 
+#if TRACK_AUTOSTART_MEMORY != ON && TRACK_AUTOSTART_MEMORY != OFF
+  #error "Configuration (Config.h): Setting TRACK_AUTOSTART_MEMORY unknown, use OFF or ON."
+#endif
+
+#if TRACK_AUTOSTART_MEMORY == ON && GOTO_FEATURE == OFF
+  #error "Configuration (Config.h): Setting TRACK_AUTOSTART_MEMORY not available when GOTO_FEATURE is OFF."
+#endif
+
 #if TRACK_COMPENSATION_DEFAULT != OFF && (TRACK_COMPENSATION_DEFAULT < COMPENSATED_TRACKING_FIRST || TRACK_COMPENSATION_DEFAULT > COMPENSATED_TRACKING_LAST)
   #error "Configuration (Config.h): Setting TRACK_COMPENSATION_DEFAULT unknown, use OFF or REFRACTION or REFRACTION_DUAL or MODEL or MODEL_DUAL."
 #endif
