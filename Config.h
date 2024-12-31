@@ -46,7 +46,7 @@
                                           //         Applies to all axes.
 
 // NON-VOLATILE MEMORY ---------------------------------------- see https://onstep.groups.io/g/main/wiki/Configuration_Controller#NV
-#define NV_DRIVER              NV_AT24C32 // NV_DEF, Use platforms default non-volatile device to remember runtime settings.  Option
+#define NV_DRIVER            NV_MB85RC256 // NV_DEF, Use platforms default non-volatile device to remember runtime settings.  Option
 
 // =================================================================================================================================
 // MOUNT ===========================================================================================================================
@@ -134,7 +134,7 @@
                                           //              at the poles. Use TOPO_STRICT to apply refraction even in that case.
                                           //              Use OBSERVED_PLACE for no refraction.
 
-#define MOUNT_COORDS_MEMORY            OFF //    OFF, ON Remembers approximate mount coordinates across power cycles.          Option
+#define MOUNT_COORDS_MEMORY            ON //    OFF, ON Remembers approximate mount coordinates across power cycles.          Option
                                           //         Requires FRAM NV memory and the mount must not move while powered down.
 
 #define MOUNT_ENABLE_IN_STANDBY        ON //    OFF, ON Enables mount motor drivers while in standby.                         Infreq
