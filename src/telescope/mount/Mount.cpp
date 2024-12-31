@@ -254,7 +254,7 @@ void Mount::enable(bool state) {
 // updates the tracking rates, etc. as appropriate for the mount state
 // called once a second by poll() but available here for immediate action
 void Mount::update() {
-  static int lastStatusFlashMs = 0;
+  static int lastStatusFlashMs = -1;
   int statusFlashMs = 0;
 
   #if GOTO_FEATURE == ON
@@ -289,7 +289,9 @@ void Mount::update() {
     axis2.setFrequencyBase(0.0F);
   }
 
-  if (statusFlashMs != lastStatusFlashMs) {
+  if (park.state == PS_PARKED) statusFlashMs = SF_PARKED;
+
+  if (statusFlashMs != lastStatusFlashMs && tasks.getHandleByName("mntLed")) {
     lastStatusFlashMs = statusFlashMs;
     mountStatus.flashRate(statusFlashMs);
     xBusy = statusFlashMs == SF_SLEWING;
