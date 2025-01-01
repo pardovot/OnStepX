@@ -137,7 +137,7 @@
 #define MOUNT_COORDS_MEMORY            ON //    OFF, ON Remembers approximate mount coordinates across power cycles.          Option
                                           //         Requires FRAM NV memory and the mount must not move while powered down.
 
-#define MOUNT_ENABLE_IN_STANDBY       OFF //    OFF, ON Enables mount motor drivers while in standby.                         Infreq
+#define MOUNT_ENABLE_IN_STANDBY        ON //    OFF, ON Enables mount motor drivers while in standby.                         Infreq
 
 // TIME AND LOCATION ---------------------------------------------- see https://onstep.groups.io/g/main/wiki/Configuration_Mount#TLS
 #define TIME_LOCATION_SOURCE       DS3231 //    OFF, DS3231 (I2C,) SD3031 (I2C,) TEENSY (T3.2 etc,) GPS, or NTP source.       Option
