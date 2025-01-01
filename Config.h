@@ -46,7 +46,7 @@
                                           //         Applies to all axes.
 
 // NON-VOLATILE MEMORY ---------------------------------------- see https://onstep.groups.io/g/main/wiki/Configuration_Controller#NV
-#define NV_DRIVER             NV_MB85RC64 // NV_DEF, Use platforms default non-volatile device to remember runtime settings.  Option
+#define NV_DRIVER            NV_MB85RC256 // NV_DEF, Use platforms default non-volatile device to remember runtime settings.  Option
 
 // =================================================================================================================================
 // MOUNT ===========================================================================================================================
