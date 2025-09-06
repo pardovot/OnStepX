@@ -105,7 +105,7 @@
 #define AXIS1_STEP_PIN          27
 #define AXIS1_DIR_PIN           26
 #ifndef AXIS1_SENSE_HOME_PIN
-  #define AXIS1_SENSE_HOME_PIN  AUX3_PIN
+  #define AXIS1_SENSE_HOME_PIN  GPIO_PIN(0)
 #endif
 #ifndef AXIS1_SERVO_PH1_PIN
   #define AXIS1_SERVO_PH1_PIN   OFF
@@ -129,7 +129,7 @@
 #define AXIS2_STEP_PIN          33
 #define AXIS2_DIR_PIN           32
 #ifndef AXIS2_SENSE_HOME_PIN
-  #define AXIS2_SENSE_HOME_PIN  AUX4_PIN
+  #define AXIS2_SENSE_HOME_PIN  GPIO_PIN(1)
 #endif
 #ifndef AXIS2_SERVO_PH1_PIN
   #define AXIS2_SERVO_PH1_PIN   OFF
