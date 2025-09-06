@@ -39,8 +39,8 @@
 #endif
 
 // The multi-purpose pins (Aux3..Aux8 can be analog pwm/dac if supported)
-#define AUX3_PIN                34               // [input only 34] Home SW for Axis1 (X_MIN)
-#define AUX4_PIN                35               // [input only 35] Home SW for Axis2 (Y_MIN)
+#define AUX3_PIN       GPIO_PIN(0)               // [input only 34] Home SW for Axis1 (X_MIN)
+#define AUX4_PIN       GPIO_PIN(1)               // [input only 35] Home SW for Axis2 (Y_MIN)
 #define AUX5_PIN                2                // [must be low at boot 2] Dew heater, etc. (HEAT_E0)
 #define AUX6_PIN                4                // Dew heater, etc. (HEAT_BED)
 #define AUX7_PIN                SPARE_RX_PIN     // Option for 1-Wire, etc.
@@ -105,7 +105,7 @@
 #define AXIS1_STEP_PIN          27
 #define AXIS1_DIR_PIN           26
 #ifndef AXIS1_SENSE_HOME_PIN
-  #define AXIS1_SENSE_HOME_PIN  GPIO_PIN(0)
+  #define AXIS1_SENSE_HOME_PIN  AUX3_PIN
 #endif
 #ifndef AXIS1_SERVO_PH1_PIN
   #define AXIS1_SERVO_PH1_PIN   OFF
@@ -129,7 +129,7 @@
 #define AXIS2_STEP_PIN          33
 #define AXIS2_DIR_PIN           32
 #ifndef AXIS2_SENSE_HOME_PIN
-  #define AXIS2_SENSE_HOME_PIN  GPIO_PIN(1)
+  #define AXIS2_SENSE_HOME_PIN  AUX4_PIN
 #endif
 #ifndef AXIS2_SERVO_PH1_PIN
   #define AXIS2_SERVO_PH1_PIN   OFF
