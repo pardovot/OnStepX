@@ -8,7 +8,20 @@ Debug/*
 Release/*
 debug.cfg
 esp32.svd
-src/plugins/*
+# Ignore everything in plugins
+/src/plugins/**
+
+# Allow the website folder itself
+!/src/plugins/website/
+# Allow files in website (but not the whole folder contents)
+!/src/plugins/website/Website.h
+!/src/plugins/website/Website.cpp
+!/src/plugins/website/config.h
+
+# Allow the config at the root of plugins
+!/src/plugins/Plugins.config.h
+
+
 debug.svd
 z.esp4.lxd75.servo.Config.h
 z.esp4.lxd75.std.Config.h
