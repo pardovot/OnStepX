@@ -8,20 +8,7 @@ Debug/*
 Release/*
 debug.cfg
 esp32.svd
-# Ignore everything in plugins
-/src/plugins/**
-
-# Allow the website folder itself
-!/src/plugins/website/
-# Allow files in website (but not the whole folder contents)
-!/src/plugins/website/Website.h
-!/src/plugins/website/Website.cpp
-!/src/plugins/website/config.h
-
-# Allow the config at the root of plugins
-!/src/plugins/Plugins.config.h
-
-
+src/plugins/*
 debug.svd
 z.esp4.lxd75.servo.Config.h
 z.esp4.lxd75.std.Config.h
@@ -33,3 +20,12 @@ z.mant.gtr.servo26.Config.h
 z.mant.gtr.std.Config.h
 z.pcb4.dc.servo.Config.h
 build/*
+
+# PlatformIO
+.pio/
+.pioenvs/
+.piolibdeps/
+piolibs/
+lib_deps_external/
+.platformio/
+.pioenvs_backup/
