@@ -8,7 +8,6 @@ Debug/*
 Release/*
 debug.cfg
 esp32.svd
-src/plugins/*
 debug.svd
 z.esp4.lxd75.servo.Config.h
 z.esp4.lxd75.std.Config.h
@@ -20,3 +19,13 @@ z.mant.gtr.servo26.Config.h
 z.mant.gtr.std.Config.h
 z.pcb4.dc.servo.Config.h
 build/*
+
+# PlatformIO
+.pio/
+.pioenvs/
+.piolibdeps/
+piolibs/
+lib_deps_external/
+.platformio/
+.pioenvs_backup/
+OnStepX.ino.cpp
