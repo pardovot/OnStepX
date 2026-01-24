@@ -8,6 +8,20 @@
 
 #include "../guide/Guide.h"
 
+// Limit defaults
+#ifndef LIMIT_HORIZON
+#define LIMIT_HORIZON -10.0F
+#endif
+#ifndef LIMIT_OVERHEAD
+#define LIMIT_OVERHEAD 80.0F
+#endif
+#ifndef LIMIT_MERIDIAN_EAST
+#define LIMIT_MERIDIAN_EAST 15.0F
+#endif
+#ifndef LIMIT_MERIDIAN_WEST
+#define LIMIT_MERIDIAN_WEST 15.0F
+#endif
+
 #pragma pack(1)
 typedef struct AltitudeLimits {
   float min;
@@ -48,7 +62,7 @@ class Limits {
   public:
     void init();
 
-    bool command(char *reply, char *command, char *parameter, bool *supressFrame, bool *numericReply, CommandError *commandError);
+    bool command(char *reply, char *command, char *parameter, bool *suppressFrame, bool *numericReply, CommandError *commandError);
 
     // constrain meridian limits to the allowed range
     void constrainMeridianLimits();
@@ -63,8 +77,17 @@ class Limits {
     // true if an error exists that impacts goto safety
     bool isGotoError();
 
+    // true if an below horizon limit
+    inline bool isBelowHorizon() { return error.altitude.min; }
+
     // true if an above overhead limit
-    bool isAboveOverhead() { return error.altitude.max; }
+    inline bool isAboveOverhead() { return error.altitude.max; }
+
+    // true if past meridian limit west
+    inline bool isPastMeridianW() { return error.meridian.west; }
+
+    // true if past the axis1 max limit
+    inline bool isPastAxis1Max() { return error.limit.axis1.max; } 
 
     // return general error code
     uint8_t errorCode();
@@ -75,9 +98,12 @@ class Limits {
     // check if limits are being enforced
     inline bool isEnabled() { return limitsEnabled; }
 
+    // disable meridian limits for the specified period in seconds
+    void limitsDisablePeriod(float seconds) { limitsDisablePeriodDs = lroundf(seconds*10.0F); }
+
     void poll();
 
-    LimitSettings settings = { { degToRadF(-10.0F), degToRadF(80.0F) }, degToRadF(15.0F), degToRadF(15.0F) };
+    LimitSettings settings = { { degToRadF(LIMIT_HORIZON), degToRadF(LIMIT_OVERHEAD) }, degToRadF(LIMIT_MERIDIAN_EAST), degToRadF(LIMIT_MERIDIAN_WEST) };
 
   private:
     void stop();
@@ -88,6 +114,8 @@ class Limits {
 
     bool limitsEnabled = false;
     LimitsError error;
+
+    int limitsDisablePeriodDs = 0; // in deciseconds (0.1s)
 };
 
 extern Limits limits;

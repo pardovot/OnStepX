@@ -8,6 +8,7 @@
 #include "../lib/tasks/OnTask.h"
 #include "../lib/gpioEx/GpioEx.h"
 #include "../lib/nv/Nv.h"
+#include "../lib/analog/Analog.h"
 #include "../lib/convert/Convert.h"
 
 #include "../libApp/commands/ProcessCmds.h"
@@ -34,61 +35,61 @@
   HAL_RESET_FUNC;
 #endif
 
-bool Telescope::command(char reply[], char command[], char parameter[], bool *supressFrame, bool *numericReply, CommandError *commandError) {
+bool Telescope::command(char reply[], char command[], char parameter[], bool *suppressFrame, bool *numericReply, CommandError *commandError) {
 
   #if PLUGIN1 != OFF && PLUGIN1_COMMAND_PROCESSING == ON
-    if (PLUGIN1.command(reply, command, parameter, supressFrame, numericReply, commandError)) return true;
+    if (PLUGIN1.command(reply, command, parameter, suppressFrame, numericReply, commandError)) return true;
   #endif
   #if PLUGIN2 != OFF && PLUGIN2_COMMAND_PROCESSING == ON
-    if (PLUGIN2.command(reply, command, parameter, supressFrame, numericReply, commandError)) return true;
+    if (PLUGIN2.command(reply, command, parameter, suppressFrame, numericReply, commandError)) return true;
   #endif
   #if PLUGIN3 != OFF && PLUGIN3_COMMAND_PROCESSING == ON
-    if (PLUGIN3.command(reply, command, parameter, supressFrame, numericReply, commandError)) return true;
+    if (PLUGIN3.command(reply, command, parameter, suppressFrame, numericReply, commandError)) return true;
   #endif
   #if PLUGIN4 != OFF && PLUGIN4_COMMAND_PROCESSING == ON
-    if (PLUGIN4.command(reply, command, parameter, supressFrame, numericReply, commandError)) return true;
+    if (PLUGIN4.command(reply, command, parameter, suppressFrame, numericReply, commandError)) return true;
   #endif
   #if PLUGIN5 != OFF && PLUGIN5_COMMAND_PROCESSING == ON
-    if (PLUGIN5.command(reply, command, parameter, supressFrame, numericReply, commandError)) return true;
+    if (PLUGIN5.command(reply, command, parameter, suppressFrame, numericReply, commandError)) return true;
   #endif
   #if PLUGIN6 != OFF && PLUGIN6_COMMAND_PROCESSING == ON
-    if (PLUGIN6.command(reply, command, parameter, supressFrame, numericReply, commandError)) return true;
+    if (PLUGIN6.command(reply, command, parameter, suppressFrame, numericReply, commandError)) return true;
   #endif
   #if PLUGIN7 != OFF && PLUGIN7_COMMAND_PROCESSING == ON
-    if (PLUGIN7.command(reply, command, parameter, supressFrame, numericReply, commandError)) return true;
+    if (PLUGIN7.command(reply, command, parameter, suppressFrame, numericReply, commandError)) return true;
   #endif
   #if PLUGIN8 != OFF && PLUGIN8_COMMAND_PROCESSING == ON
-    if (PLUGIN8.command(reply, command, parameter, supressFrame, numericReply, commandError)) return true;
+    if (PLUGIN8.command(reply, command, parameter, suppressFrame, numericReply, commandError)) return true;
   #endif
 
   #ifdef MOUNT_PRESENT
-    if (mount.command(reply, command, parameter, supressFrame, numericReply, commandError)) return true;
-    if (guide.command(reply, command, parameter, supressFrame, numericReply, commandError)) return true;
+    if (mount.command(reply, command, parameter, suppressFrame, numericReply, commandError)) return true;
+    if (guide.command(reply, command, parameter, suppressFrame, numericReply, commandError)) return true;
     #if GPIO_DEVICE != OFF
-      if (gpio.command(reply, command, parameter, supressFrame, numericReply, commandError)) return true;
+      if (gpio.command(reply, command, parameter, suppressFrame, numericReply, commandError)) return true;
     #endif
-    if (mountStatus.command(reply, command, parameter, supressFrame, numericReply, commandError)) return true;
-    if (goTo.command(reply, command, parameter, supressFrame, numericReply, commandError)) return true;
-    if (park.command(reply, command, parameter, supressFrame, numericReply, commandError)) return true;
-    if (library.command(reply, command, parameter, supressFrame, numericReply, commandError)) return true;
-    if (site.command(reply, command, parameter, supressFrame, numericReply, commandError)) return true;
-    if (limits.command(reply, command, parameter, supressFrame, numericReply, commandError)) return true;
-    if (home.command(reply, command, parameter, supressFrame, numericReply, commandError)) return true;
-    if (pec.command(reply, command, parameter, supressFrame, numericReply, commandError)) return true;
-    if (axis1.command(reply, command, parameter, supressFrame, numericReply, commandError)) return true;
-    if (axis2.command(reply, command, parameter, supressFrame, numericReply, commandError)) return true;
+    if (mountStatus.command(reply, command, parameter, suppressFrame, numericReply, commandError)) return true;
+    if (goTo.command(reply, command, parameter, suppressFrame, numericReply, commandError)) return true;
+    if (park.command(reply, command, parameter, suppressFrame, numericReply, commandError)) return true;
+    if (library.command(reply, command, parameter, suppressFrame, numericReply, commandError)) return true;
+    if (site.command(reply, command, parameter, suppressFrame, numericReply, commandError)) return true;
+    if (limits.command(reply, command, parameter, suppressFrame, numericReply, commandError)) return true;
+    if (home.command(reply, command, parameter, suppressFrame, numericReply, commandError)) return true;
+    if (pec.command(reply, command, parameter, suppressFrame, numericReply, commandError)) return true;
+    if (axis1.command(reply, command, parameter, suppressFrame, numericReply, commandError)) return true;
+    if (axis2.command(reply, command, parameter, suppressFrame, numericReply, commandError)) return true;
   #endif
 
-  #ifdef ROTATOR_PRESENT
-    if (rotator.command(reply, command, parameter, supressFrame, numericReply, commandError)) return true;
+  #if defined(ROTATOR_PRESENT) || defined(ROTATOR_CLIENT_PRESENT)
+    if (rotator.command(reply, command, parameter, suppressFrame, numericReply, commandError)) return true;
   #endif
 
-  #ifdef FOCUSER_PRESENT
-    if (focuser.command(reply, command, parameter, supressFrame, numericReply, commandError)) return true;
+  #if defined(FOCUSER_PRESENT) || defined(FOCUSER_CLIENT_PRESENT)
+    if (focuser.command(reply, command, parameter, suppressFrame, numericReply, commandError)) return true;
   #endif
 
-  #ifdef FEATURES_PRESENT
-    if (features.command(reply, command, parameter, supressFrame, numericReply, commandError)) return true;
+   #if defined(FEATURES_PRESENT) || defined(FEATURES_CLIENT_PRESENT)
+    if (features.command(reply, command, parameter, suppressFrame, numericReply, commandError)) return true;
   #endif
 
   //  B - Reticle/Accessory Control
@@ -106,8 +107,11 @@ bool Telescope::command(char reply[], char command[], char parameter[], bool *su
       if (command[1] == '-') reticleBrightness += scale;
       if (reticleBrightness > 255) reticleBrightness = 255;
       if (command[1] == '+') reticleBrightness -= scale;
-      if (reticleBrightness < 0)   reticleBrightness = 0;
-      analogWrite(RETICLE_LED_PIN, analog8BitToAnalogRange(RETICLE_LED_INVERT == ON ? 255 - reticleBrightness : reticleBrightness));
+      if (reticleBrightness < 0) reticleBrightness = 0;
+
+      float duty = (float)reticleBrightness*(1.0F/255.0F);
+      analog.write(RETICLE_LED_PIN, RETICLE_LED_INVERT == ON ? duty : 1.0F - duty);
+
       #if RETICLE_LED_MEMORY == ON
         nv.write(NV_TELESCOPE_SETTINGS_BASE, reticleBrightness);
       #endif
@@ -123,7 +127,7 @@ bool Telescope::command(char reply[], char command[], char parameter[], bool *su
       // spaces are encoded as '_'
       for (unsigned int i = 0; i < strlen(parameter); i++) if (parameter[i] == '_') parameter[i] = ' ';
       // prefix with "REM> "
-      if (strstr(parameter, "ERR:") == parameter || strstr(parameter, "WRN:") == parameter || strstr(parameter, "MSG:") == parameter) D("REM> ");
+      if (strstr(parameter, "ERR:") == parameter || strstr(parameter, "WRN:") == parameter || strstr(parameter, "MSG:") == parameter) { D("REM> "); }
       // a newline is encoded as '&' in the last char of message
       int l = strlen(parameter);
       if (l > 0 && parameter[l - 1] == '&') { parameter[l - 1] = 0; DL(parameter); } else { D(parameter); }

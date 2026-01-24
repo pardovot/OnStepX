@@ -11,6 +11,10 @@
 #include "../../../lib/calendars/Calendars.h"
 #include "../../../lib/tls/Tls.h"
 
+#ifndef SITE_MIN_PPS_SUB_MICRO
+  #define SITE_MIN_PPS_SUB_MICRO 4
+#endif
+
 extern volatile unsigned long fracLAST;
 
 typedef struct LatitudeExtras {
@@ -40,7 +44,7 @@ class Site {
   public:
     void init();
     
-    bool command(char *reply, char *command, char *parameter, bool *supressFrame, bool *numericReply, CommandError *commandError);
+    bool command(char *reply, char *command, char *parameter, bool *suppressFrame, bool *numericReply, CommandError *commandError);
 
     // update/apply the site latitude and longitude, necessary for LAST calculations etc.
     void updateLocation();

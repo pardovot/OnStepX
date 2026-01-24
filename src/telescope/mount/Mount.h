@@ -47,7 +47,7 @@ class Mount {
     void init();
     void begin();
 
-    bool command(char *reply, char *command, char *parameter, bool *supressFrame, bool *numericReply, CommandError *commandError);
+    bool command(char *reply, char *command, char *parameter, bool *suppressFrame, bool *numericReply, CommandError *commandError);
 
     // get current equatorial position (Native coordinate system)
     Coordinate getPosition(CoordReturn coordReturn = CR_MOUNT_EQU);
@@ -117,26 +117,10 @@ class Mount {
     TrackingState trackingState = TS_NONE;
 };
 
-#ifdef AXIS1_STEP_DIR_PRESENT
-  extern StepDirMotor motor1;
-#elif defined(AXIS1_SERVO_PRESENT)
-  extern ServoMotor motor1;
-#elif defined(AXIS1_ODRIVE_PRESENT)
-  extern ODriveMotor motor1;
-#elif defined(AXIS1_KTECH_PRESENT)
-  extern KTechMotor motor1;
-#endif
+extern Motor& motor1;
 extern Axis axis1;
 
-#ifdef AXIS2_STEP_DIR_PRESENT
-  extern StepDirMotor motor2;
-#elif defined(AXIS2_SERVO_PRESENT)
-  extern ServoMotor motor2;
-#elif defined(AXIS2_ODRIVE_PRESENT)
-  extern ODriveMotor motor2;
-#elif defined(AXIS2_KTECH_PRESENT)
-  extern KTechMotor motor2;
-#endif
+extern Motor& motor2;
 extern Axis axis2;
 
 extern Mount mount;

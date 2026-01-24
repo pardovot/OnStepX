@@ -43,13 +43,14 @@
 // Firmware version ----------------------------------------------------------------------------------------------------------------
 #define FirmwareName                "On-Step"
 #define FirmwareVersionMajor        10
-#define FirmwareVersionMinor        26     // minor version 00 to 99
-#define FirmwareVersionPatch        "g"    // for example major.minor patch: 10.03c
+#define FirmwareVersionMinor        27     // minor version 00 to 99
+#define FirmwareVersionPatch        "j"    // for example major.minor patch: 10.03c
 #define FirmwareVersionConfig       6      // internal, for tracking configuration file changes
 
 #include "src/Common.h"
 #include "src/Validate.h"
 #include "src/lib/nv/Nv.h"
+#include "src/lib/analog/Analog.h"
 #include "src/lib/sense/Sense.h"
 #include "src/lib/tasks/OnTask.h"
 
@@ -96,6 +97,8 @@ void setup() {
   VLF("MSG: System, HAL initialize");
   HAL_INIT();
   WIRE_INIT();
+
+  analog.begin();
 
   if (!nv.init()) {
     DLF("ERR: Setup, NV (EEPROM/FRAM/Flash/etc.) device not found!");

@@ -11,9 +11,9 @@
 #include "../park/Park.h"
 #include "../site/Site.h"
 
-bool Home::command(char *reply, char *command, char *parameter, bool *supressFrame, bool *numericReply, CommandError *commandError) {
+bool Home::command(char *reply, char *command, char *parameter, bool *suppressFrame, bool *numericReply, CommandError *commandError) {
   UNUSED(reply);
-  UNUSED(supressFrame);
+  UNUSED(suppressFrame);
   if (command[0] == 'h') {
     // :h?#       Get home status - has sense, auto home enabled, offset axis1, offset axis2 (in arcseconds.)
     //            Returns: n,n,n,n#
@@ -41,7 +41,7 @@ bool Home::command(char *reply, char *command, char *parameter, bool *supressFra
       *numericReply = false;
     } else
 
-    // :hC1,n#    Set home sense direction and home offset for axis1 arcseconds.
+    // :hC1,n#    Set home sense direction and home offset for axis1 arcseconds
     //            Returns: Nothing
     if (command[1] == 'C' && parameter[0] == '1' && parameter[1] == ',') {
       if (parameter[2] == 'R' && parameter[3] == 0) {
@@ -58,7 +58,7 @@ bool Home::command(char *reply, char *command, char *parameter, bool *supressFra
       *numericReply = false;
     } else
 
-    // :hC2,n#    Set home sense direction and home offset for axis2 arcseconds.
+    // :hC2,n#    Set home sense direction and home offset for axis2 arcseconds
     //            Returns: Nothing
     if (command[1] == 'C' && parameter[0] == '2' && parameter[1] == ',') {
       if (parameter[2] == 'R' && parameter[3] == 0) {

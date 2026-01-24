@@ -5,15 +5,34 @@
 
 #ifdef FEATURES_PRESENT
 
-#include "../../lib/tasks/OnTask.h"
-#include "../../lib/nv/Nv.h"
+#include "../../../lib/tasks/OnTask.h"
+#include "../../../lib/nv/Nv.h"
 
-#include "../../libApp/weather/Weather.h"
-#include "../../telescope/Telescope.h"
+#include "../../../libApp/weather/Weather.h"
+#include "../../../telescope/Telescope.h"
 
 void featuresPollWrapper() { features.poll(); }
 
-void Features::init() {
+#if defined(FEATURES_CAN_SERVER_PRESENT)
+// 1 Hz heartbeat TX for this AF node
+static void auxHeartbeatWrapper() {
+  if (!canPlus.ready) return;
+  const uint16_t hbId = (uint16_t)(CAN_FEATURES_HB_ID_BASE);
+  const uint8_t b = 0; // payload reserved; currently unused
+  canPlus.writePacket((int)hbId, &b, 1);
+}
+#endif
+
+bool Features::init() {
+
+  #if defined(FEATURES_CAN_SERVER_PRESENT)
+    if (!CanTransportServer::init(true, 2)) return false;
+  #endif
+
+  #ifdef POWER_MONITOR_PRESENT
+    if (!powerMonitor.init()) return false;
+  #endif
+
   for (int i = 0; i < 8; i++) {
     if (device[i].pin == AUX) device[i].pin = auxPins[i];
 
@@ -68,7 +87,21 @@ void Features::init() {
   }
 
   VF("MSG: Auxiliary, start feature monitor task (rate 20ms priority 6)... ");
-  if (tasks.add(20, 0, true, 6, featuresPollWrapper, "AuxPoll")) { VLF("success"); } else { VLF("FAILED!"); }
+  if (tasks.add(20, 0, true, 6, featuresPollWrapper, "AuxPoll")) { VLF("success"); } else { VLF("FAILED!"); return false; }
+
+  ready = true;
+
+  return true;
+}
+
+void Features::begin() {
+  if (!ready) return;
+
+  // start heartbeat task
+  #if defined(FEATURES_CAN_SERVER_PRESENT)
+    VF("MSG: Auxiliary, starting CAN heartbeat task (rate 1s priority 6)... ");
+    if (tasks.add(1000, 0, true, 6, auxHeartbeatWrapper, "AuxHB")) { VLF("success"); } else { VLF("FAILED!"); }
+  #endif
 }
 
 void Features::poll() {
@@ -110,7 +143,6 @@ void Features::poll() {
     if (toggle++ % (100/COVER_SWITCH_SERVO_SPEED_PERCENT) == 0) {
       for (int i = 0; i < 8; i++) {
         if (device[i].purpose == COVER_SWITCH) {
-          VL(cover[i].position);
           if (cover[i].position > cover[i].target) cover[i].position--; else
           if (cover[i].position < cover[i].target) cover[i].position++;
           cover[i].servo->write(cover[i].position);

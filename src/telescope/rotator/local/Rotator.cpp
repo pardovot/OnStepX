@@ -1,25 +1,42 @@
 //--------------------------------------------------------------------------------------------------
-// telescope rotator control
+// local telescope rotator control
 
 #include "Rotator.h"
 
 #ifdef ROTATOR_PRESENT
 
-#include "../../lib/tasks/OnTask.h"
+#include "../../../lib/tasks/OnTask.h"
 
-#include "../Telescope.h"
-#include "../mount/Mount.h"
-#include "../mount/site/Site.h"
+#include "../../Telescope.h"
+#include "../../mount/Mount.h"
+#include "../../mount/site/Site.h"
 
 void rotWrapper() { rotator.monitor(); }
 
+#if defined(ROTATOR_CAN_SERVER_PRESENT)
+// 1 Hz heartbeat TX for this remote rotator node
+static void rotHeartbeatWrapper() {
+  if (!canPlus.ready) return;
+  const uint16_t hbId = (uint16_t)(CAN_ROTATOR_HB_ID_BASE);
+  const uint8_t b = 0; // payload reserved; currently unused
+  canPlus.writePacket((int)hbId, &b, 1);
+}
+#endif
+
 // initialize rotator
-void Rotator::init() {
+bool Rotator::init() {
+  #if defined(ROTATOR_CAN_SERVER_PRESENT)
+    if (!CanTransportServer::init(true, 2)) return false;
+  #endif
+
   // wait a moment for any background processing that may be needed
   delay(1000);
 
   // confirm the data structure size
-  if (RotatorSettingsSize < sizeof(RotatorSettings)) { nv.initError = true; DL("ERR: Rotator::init(), RotatorSettingsSize error"); }
+  if (RotatorSettingsSize < sizeof(RotatorSettings)) {
+    nv.initError = true;
+    DL("ERR: Rotator::init(), RotatorSettingsSize error"); return false;
+  }
 
   // get settings stored in NV ready
   if (!nv.hasValidKey()) {
@@ -29,7 +46,11 @@ void Rotator::init() {
   readSettings();
 
   VLF("MSG: Rotator, init (Axis3)");
-  if (!axis3.init(&motor3)) { initError.driver = true; DLF("ERR: Rotator::init(), no motion controller for Axis3!"); }
+  if (!axis3.init(&motor3)) {
+    initError.driver = true;
+    DLF("ERR: Rotator::init(), no motion controller for Axis3!");
+    return false;
+  }
   axis3.resetPositionSteps(0);
   axis3.setBacklashSteps(settings.backlash);
   axis3.setFrequencyMax(AXIS3_SLEW_RATE_BASE_DESIRED*2.0F);
@@ -38,14 +59,26 @@ void Rotator::init() {
   axis3.setSlewAccelerationTime(AXIS3_ACCELERATION_TIME);
   axis3.setSlewAccelerationTimeAbort(AXIS3_RAPID_STOP_TIME);
   if (AXIS3_POWER_DOWN == ON) axis3.setPowerDownTime(AXIS3_POWER_DOWN_TIME);
+
+  ready = true;
+
+  return true;
 }
 
 void Rotator::begin() {
+  if (!ready) return;
+
   axis3.calibrateDriver();
 
   // start monitor task
   VF("MSG: Rotator, start derotation task (rate 1s priority 6)... ");
   if (tasks.add(1000, 0, true, 6, rotWrapper, "RotMon")) { VLF("success"); } else { VLF("FAILED!"); }
+
+  // start heartbeat task
+  #if defined(ROTATOR_CAN_SERVER_PRESENT)
+    VF("MSG: Rotator, starting CAN heartbeat task (rate 1s priority 6)... ");
+    if (tasks.add(1000, 0, true, 6, rotHeartbeatWrapper, "RotHB")) { VLF("success"); } else { VLF("FAILED!"); }
+  #endif
 
   unpark();
 }
@@ -57,6 +90,8 @@ int Rotator::getBacklash() {
 
 // set backlash in steps
 CommandError Rotator::setBacklash(int value) {
+  if (!ready) return CE_CMD_UNKNOWN;
+  
   if (value < 0 || value > 10000) return CE_PARAM_RANGE;
   if (settings.parkState >= PS_PARKED) return CE_PARKED;
 
@@ -90,6 +125,8 @@ CommandError Rotator::setBacklash(int value) {
 
 // set move rate, 1 for 0.01 deg/sec slew, 2 for 0.1 deg/sec, 3 for 1 deg/sec, 4 for 0.5x goto rate
 void Rotator::setMoveRate(int value) {
+  if (!ready) return;
+  
   switch (value) {
     case 1: moveRate = 0.01F; break;
     case 2: moveRate = 0.1F; break;
@@ -102,8 +139,11 @@ void Rotator::setMoveRate(int value) {
 
 // start slew in the specified direction
 CommandError Rotator::move(Direction dir) {
+  if (!ready) return CE_CMD_UNKNOWN;
+  
   if (settings.parkState >= PS_PARKED) return CE_PARKED;
 
+  axis3.enable(true);
   axis3.setSynchronizedFrequency(0.0F);
 
   return axis3.autoSlew(dir, moveRate);
@@ -132,11 +172,14 @@ void Rotator::setGotoRate(int value) {
 
 // move rotator to a specific location
 CommandError Rotator::gotoTarget(float target) {
+  if (!ready) return CE_CMD_UNKNOWN;
+
   if (settings.parkState >= PS_PARKED) return CE_PARKED;
 
   VF("MSG: Rotator, goto target coordinate set ("); V(target); VL(" deg)");
   VLF("MSG: Rotator, attempting goto");
 
+  axis3.enable(true);
   axis3.setSynchronizedFrequency(0.0F);
   axis3.setTargetCoordinate(target);
 
@@ -148,6 +191,8 @@ CommandError Rotator::gotoTarget(float target) {
 
 // parks rotator at current position
 CommandError Rotator::park() {
+  if (!ready) return CE_CMD_UNKNOWN;
+  
   if (settings.parkState == PS_PARKED)      return CE_NONE;
   if (settings.parkState == PS_PARKING)     return CE_PARK_FAILED;
   if (settings.parkState == PS_UNPARKING)   return CE_PARK_FAILED;
@@ -156,6 +201,8 @@ CommandError Rotator::park() {
   derotatorEnabled = false;
 
   VLF("MSG: Rotator, parking");
+
+  axis3.enable(true);
   axis3.setBacklash(0.0F);
   settings.position = axis3.getInstrumentCoordinate();
   axis3.setTargetCoordinatePark(settings.position);
@@ -172,6 +219,8 @@ CommandError Rotator::park() {
 
 // unparks rotator
 CommandError Rotator::unpark() {
+  if (!ready) return CE_CMD_UNKNOWN;
+  
   if (settings.parkState == PS_PARKING)     return CE_PARK_FAILED;
   if (settings.parkState == PS_UNPARKING)   return CE_PARK_FAILED;
   if (settings.parkState == PS_PARK_FAILED) return CE_PARK_FAILED;
@@ -268,7 +317,7 @@ void Rotator::monitor() {
         homing = false;
       }
 
-      // delayed write of focuser position
+      // delayed write of rotator position
       if (ROTATOR_WRITE_DELAY != 0) {
         if (secs > writeTime) {
           settings.position = axis3.getInstrumentCoordinate();

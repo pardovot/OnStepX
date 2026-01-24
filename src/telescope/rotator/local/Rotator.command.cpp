@@ -1,21 +1,25 @@
 //--------------------------------------------------------------------------------------------------
-// telescope rotator control, commands
+// local telescope rotator control, commands
 
-#include "../../lib/convert/Convert.h"
-#include "../../lib/axis/Axis.h"
-
-#include "../mount/Mount.h"
 #include "Rotator.h"
 
-#if AXIS3_DRIVER_MODEL != OFF
+#ifdef ROTATOR_PRESENT
+
+#include "../../../lib/convert/Convert.h"
+#include "../../../lib/axis/Axis.h"
+#include "../../mount/Mount.h"
 
 extern Axis axis3;
 
-bool Rotator::command(char *reply, char *command, char *parameter, bool *supressFrame, bool *numericReply, CommandError *commandError) {
-  *supressFrame = false;
+// by default reply[80] == "", suppressFrame == false, numericReply == true, and commandError == CE_NONE
+// return true if the command has been completely handled and no further command() will be called, or false if not
+// for commands that are handled repeatedly commandError might contain CE_NONE or CE_1 to indicate success
+// numericReply=true means boolean/numeric-style responses (e.g., CE_1/CE_0/errors) rather than a payload
+bool Rotator::command(char *reply, char *command, char *parameter, bool *suppressFrame, bool *numericReply, CommandError *commandError) {
+  if (!ready) return false;
 
   // process any rotator axis commands
-  if (axis3.command(reply, command, parameter, supressFrame, numericReply, commandError)) return true;
+  if (axis3.command(reply, command, parameter, suppressFrame, numericReply, commandError)) return true;
 
   if (command[0] == 'h') {
     // :hP#       Moves rotator to the park position
@@ -37,15 +41,15 @@ bool Rotator::command(char *reply, char *command, char *parameter, bool *supress
     } else return false;
   } else
 
-  // :rA#    rotator Active?
-  //            Return: 0 on failure (no rotator)
-  //                    1 on success
-  if (command[0] == 'r' && command[1] == 'A' && parameter[0] == 0) {
-    // empty command for success response 1
-  } else
-
   // r - rotator Commands
   if (command[0] == 'r') {
+
+    // :rA#    rotator Active?
+    //            Return: 0 on failure (no rotator)
+    //                    1 on success
+    if (command[1] == 'A' && parameter[0] == 0) {
+      // empty command for success response 1
+    } else
 
     // :rT#       Get rotator sTatus
     //            Returns: s#
@@ -145,7 +149,7 @@ bool Rotator::command(char *reply, char *command, char *parameter, bool *supress
     } else
 
     // :rG#       Get rotator current angle
-    //            Returns: sDD*MM#
+    //            Returns: sDDD*MM#
     if (command[1] == 'G') {
       convert.doubleToDms(reply, axis3.getInstrumentCoordinate(), true, true, PM_LOW);
       *numericReply = false;
@@ -197,6 +201,7 @@ bool Rotator::command(char *reply, char *command, char *parameter, bool *supress
     if (command[1] == 'C') {
       if (AXIS3_SENSE_HOME != OFF) {
         if (settings.parkState == PS_UNPARKED) {
+          axis3.enable(true);
           axis3.setFrequencySlew(settings.gotoRate);
           *commandError = axis3.autoSlewHome();
           if (*commandError == CE_NONE) {
@@ -253,12 +258,10 @@ bool Rotator::command(char *reply, char *command, char *parameter, bool *supress
   //                     N# for none
   if (command[0] == 'G' && command[1] == 'X' && parameter[0] == '9' && parameter[1] == '8' && parameter[2] == 0) {
     *numericReply = false;
-    if (AXIS3_DRIVER_MODEL != OFF) {
-      #if defined(MOUNT_PRESENT)
-        if (transform.mountType == ALTAZM) strcpy(reply, "D"); else
-      #endif
-      strcpy(reply, "R");
-    } else strcpy(reply, "N");
+    #if defined(MOUNT_PRESENT)
+      if (transform.mountType == ALTAZM) strcpy(reply, "D"); else
+    #endif
+    strcpy(reply, "R");
   } else return false;
 
   return true;

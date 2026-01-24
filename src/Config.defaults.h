@@ -149,13 +149,13 @@
 #define CAN_PLUS                      OFF                         // Select from CAN_SAN, CAN_ESP32, CAN_MCP2515, CANn_TEENSY4
 #endif
 #ifndef CAN_BAUD
-#define CAN_BAUD                      500000                      // 500000 baud default
+#define CAN_BAUD                      1000000                     // 1000000 baud default
 #endif
 #ifndef CAN_SEND_RATE_MS
-#define CAN_SEND_RATE_MS              25                          // 40 Hz CAN controller send message processing rate
+#define CAN_SEND_RATE_MS              10                          // 100 Hz CAN controller send message processing rate
 #endif
 #ifndef CAN_RECV_RATE_MS
-#define CAN_RECV_RATE_MS              5                           // 200 Hz CAN controller recv. message processing rate
+#define CAN_RECV_RATE_MS              10                          // 100 Hz CAN controller recv message processing rate
 #endif
 #ifndef CAN_RX_PIN
 #define CAN_RX_PIN                    OFF                         // for ESP32 CAN interface
@@ -389,6 +389,10 @@
   #define AXIS1_KTECH_PRESENT
 #endif
 
+#if AXIS1_DRIVER_MODEL == MKS42D
+  #define AXIS1_MKS42D_PRESENT
+#endif
+
 #ifndef AXIS2_DRIVER_MODEL
 #define AXIS2_DRIVER_MODEL            OFF                         // specify a driver to enable
 #endif
@@ -561,6 +565,10 @@
   #define AXIS2_KTECH_PRESENT
 #endif
 
+#if AXIS2_DRIVER_MODEL == MKS42D
+  #define AXIS2_MKS42D_PRESENT
+#endif
+
 // decode internal mount type, tangent arm, azm wrap
 #ifndef MOUNT_TYPE
 #define MOUNT_TYPE                    GEM
@@ -721,6 +729,12 @@
 #ifndef LIMIT_STRICT
 #define LIMIT_STRICT                  ON                          // ON enables Mount limits at startup if date/time are set
 #endif
+#ifndef LIMIT_RECOVERY
+#define LIMIT_RECOVERY                OFF                         // ON allows 1s for gotos away from horizon, meridian w, and axis1 max limits
+#endif
+#ifndef LIMIT_RECOVERY_WITH_TRACKING
+#define LIMIT_RECOVERY_WITH_TRACKING  OFF                         // ON to automatically enable tracking on limit recovery
+#endif
 
 // st4
 #ifndef ST4_INTERFACE
@@ -786,22 +800,22 @@
 
 // tracking
 #ifndef TRACK_AUTOSTART
-#define TRACK_AUTOSTART               OFF                         // begin tracking at startup
+#define TRACK_AUTOSTART               OFF                         // automatically begins tracking at startup
 #endif
 #ifndef TRACK_WITHOUT_LIMITS
-#define TRACK_WITHOUT_LIMITS          OFF                         // allow tracking even if limits are disabled
+#define TRACK_WITHOUT_LIMITS          OFF                         // allows tracking even if limits are disabled
 #endif
 #ifndef TRACK_COMPENSATION_DEFAULT
-#define TRACK_COMPENSATION_DEFAULT    OFF
+#define TRACK_COMPENSATION_DEFAULT    OFF                         // use OFF, REFRACTION, REFRACTION_DUAL, MODEL, MODEL_DUAL
 #endif
 #ifndef TRACK_COMPENSATION_MEMORY
-#define TRACK_COMPENSATION_MEMORY     OFF
+#define TRACK_COMPENSATION_MEMORY     OFF                         // remembers the last runtime tracking compensation setting
 #endif
 #ifndef TRACK_BACKLASH_RATE
-#define TRACK_BACKLASH_RATE           25
-#endif
+#define TRACK_BACKLASH_RATE           25                          // the backlash takeup rate in x the sidereal rate
+#endif                                                            // this must be within stepper motors torque limits (no acceleration)
 #ifndef TRACKING_RATE_DEFAULT_HZ
-  #define TRACKING_RATE_DEFAULT_HZ    SIDEREAL_RATE_HZ
+  #define TRACKING_RATE_DEFAULT_HZ    SIDEREAL_RATE_HZ            // the normal sidereal tracking rate
 #endif
 
 // slewing
@@ -1031,6 +1045,10 @@
   #define AXIS3_KTECH_PRESENT
 #endif
 
+#if AXIS3_DRIVER_MODEL == MKS42D
+  #define AXIS3_MKS42D_PRESENT
+#endif
+
 // -----------------------------------------------------------------------------------
 // focuser settings, all
 
@@ -1217,6 +1235,10 @@
   #define AXIS4_KTECH_PRESENT
 #endif
 
+#if AXIS4_DRIVER_MODEL == MKS42D
+  #define AXIS4_MKS42D_PRESENT
+#endif
+
 // focuser settings, FOCUSER2
 #ifndef AXIS5_DRIVER_MODEL
 #define AXIS5_DRIVER_MODEL            OFF
@@ -1389,6 +1411,10 @@
   #define AXIS5_KTECH_PRESENT
 #endif
 
+#if AXIS5_DRIVER_MODEL == MKS42D
+  #define AXIS5_MKS42D_PRESENT
+#endif
+
 // focuser settings, FOCUSER3
 #ifndef AXIS6_DRIVER_MODEL
 #define AXIS6_DRIVER_MODEL            OFF
@@ -1552,6 +1578,10 @@
   #define AXIS6_KTECH_PRESENT
 #endif
 
+#if AXIS6_DRIVER_MODEL == MKS42D
+  #define AXIS6_MKS42D_PRESENT
+#endif
+
 // focuser settings, FOCUSER4
 #ifndef AXIS7_DRIVER_MODEL
 #define AXIS7_DRIVER_MODEL            OFF
@@ -1712,6 +1742,10 @@
 
 #if AXIS7_DRIVER_MODEL == KTECH
   #define AXIS7_KTECH_PRESENT
+#endif
+
+#if AXIS7_DRIVER_MODEL == MKS42D
+  #define AXIS7_MKS42D_PRESENT
 #endif
 
 // focuser settings, FOCUSER5
@@ -1877,6 +1911,10 @@
   #define AXIS8_KTECH_PRESENT
 #endif
 
+#if AXIS8_DRIVER_MODEL == MKS42D
+  #define AXIS8_MKS42D_PRESENT
+#endif
+
 // focuser settings, FOCUSER6
 #ifndef AXIS9_DRIVER_MODEL
 #define AXIS9_DRIVER_MODEL            OFF
@@ -2040,6 +2078,10 @@
   #define AXIS9_KTECH_PRESENT
 #endif
 
+#if AXIS9_DRIVER_MODEL == MKS42D
+  #define AXIS9_MKS42D_PRESENT
+#endif
+
 // -----------------------------------------------------------------------------------
 // helper for checking driver presence
 #define DRIVER_CHECK(model) \
@@ -2142,6 +2184,11 @@
 // flag presence of KTECH motors
 #if DRIVER_CHECK(KTECH)
   #define KTECH_MOTOR_PRESENT
+#endif
+
+// flag presence of MKS SERVO42D/57D motors
+#if DRIVER_CHECK(MKS42D)
+  #define MKS42D_MOTOR_PRESENT
 #endif
 
 // flag to indicate if any motor is present
@@ -2328,8 +2375,78 @@
 #define FEATURE8_ON_STATE             HIGH
 #endif
 
-// thermistor configuration settings to support two types
+// auxiliary feature power monitor configuration
 
+// fan control
+#ifndef FAN_PIN
+#define FAN_PIN                       OFF                           // PWM capable pin to run a small fan to help cool the controller
+#endif
+#ifndef FAN_THRESHOLD_LOW
+#define FAN_THRESHOLD_LOW             35                            // Deg. C
+#endif
+#ifndef FAN_POWER_LOW
+#define FAN_POWER_LOW                 60                            // %
+#endif
+#ifndef FAN_THRESHOLD_MID
+#define FAN_THRESHOLD_MID             45                            // Deg. C
+#endif
+#ifndef FAN_POWER_MID
+#define FAN_POWER_MID                 80                            // %
+#endif
+#ifndef FAN_THRESHOLD_HIGH
+#define FAN_THRESHOLD_HIGH            50                            // Deg. C
+#endif
+#ifndef FAN_POWER_HIGH
+#define FAN_POWER_HIGH                100                           // %
+#endif
+#ifndef FAN_THRESHOLD_OT
+#define FAN_THRESHOLD_OT              60                            // turn off all channels if MCU temperature exceeds this (Deg. C)
+#endif
+#if defined(FAN_PIN)
+  #define POWER_MONITOR_FAN_PRESENT
+#endif
+
+// voltage sensing
+//#define V_SENSE_PINS {OFF,OFF,OFF,OFF,OFF,OFF,OFF,OFF}            // an array of pin#'s corresponding to auxiliary features 1..8
+#ifndef V_SENSE_FORMULA
+#define V_SENSE_FORMULA               (v*18.405)                    // scales up typical 0..3.3V to actual V (47k/2.7k resistor voltage divider)
+#endif
+#ifndef V_SENSE_LIMIT_LOW
+#define V_SENSE_LIMIT_LOW             10.5                          // 12V nominal, low limit below this all channels are turned OFF
+#endif
+#ifndef V_SENSE_LIMIT_HIGH
+#define V_SENSE_LIMIT_HIGH            13.8                          // 12V nominal, high limit above this all channels are turned OFF
+#endif
+#ifndef V_SENSE_LIMIT_EXCLUDE
+#define V_SENSE_LIMIT_EXCLUDE         OFF                           // allow excluding pin# from the checks (variable voltage output)
+#endif
+#if defined(V_SENSE_PINS) && defined(V_SENSE_FORMULA)
+  #define POWER_MONITOR_VOLTAGE_PRESENT
+#endif
+
+// current sensing
+//#define I_SENSE_PINS {OFF,OFF,OFF,OFF,OFF,OFF,OFF,OFF}            // an array of pin#'s corresponding to auxiliary features 1..8
+#ifndef I_SENSE_FORMULA
+#define I_SENSE_FORMULA               (-((v-1.65)/0.09))            // nominal 3.3V Vcc/2 (at 0A) with scaling (down) at 0.09V/Amp
+#endif
+#ifndef I_SENSE_CHANNEL_MAX
+#define I_SENSE_CHANNEL_MAX {OFF,OFF,OFF,OFF,OFF,OFF,OFF,OFF}       // turn off individual channel (1..8) if current exceeds this (Amps)
+#endif
+#ifndef I_SENSE_COMBINED_MAX
+#define I_SENSE_COMBINED_MAX          12                            // turn off all channels if combined current exceeds this (Amps)
+#endif
+#if defined(I_SENSE_PINS) && defined(I_SENSE_FORMULA)
+  #define POWER_MONITOR_CURRENT_PRESENT
+#endif
+
+#if defined(POWER_MONITOR_VOLTAGE_PRESENT) && defined(POWER_MONITOR_CURRENT_PRESENT)
+  #define POWER_MONITOR_PRESENT
+#endif
+
+// -----------------------------------------------------------------------------------
+// thermistor configuration settings
+
+// type 1
 #ifndef THERMISTOR1_TNOM
 #define THERMISTOR1_TNOM              25                          // nominal temperature (Celsius)
 #endif
@@ -2343,6 +2460,7 @@
 #define THERMISTOR1_RSERIES           4700                        // series resistor value (Ohms)
 #endif
 
+// type 2
 #ifndef THERMISTOR2_TNOM
 #define THERMISTOR2_TNOM              25                          // nominal temperature (Celsius)
 #endif
@@ -2355,3 +2473,4 @@
 #ifndef THERMISTOR2_RSERIES
 #define THERMISTOR2_RSERIES           4700                        // series resistor value (Ohms)
 #endif
+
