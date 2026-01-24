@@ -44,6 +44,13 @@ typedef struct LimitsError {
   MerdianError    meridian;
 } LimitsError;
 
+#ifdef SUPERVISED_FEATURES
+typedef struct SupervisedRaLimitError {
+  uint8_t east;   // East limit exceeded (reverse direction)
+  uint8_t west;   // West limit exceeded (forward direction)
+} SupervisedRaLimitError;
+#endif
+
 class Limits {
   public:
     void init();
@@ -76,6 +83,14 @@ class Limits {
     inline bool isEnabled() { return limitsEnabled; }
 
     void poll();
+
+    #ifdef SUPERVISED_FEATURES
+    // Check supervised RA limits based on true motor position
+    void checkSupervisedRaLimits();
+    
+    // Supervised RA limit error state
+    SupervisedRaLimitError supervisedError;
+    #endif
 
     LimitSettings settings = { { degToRadF(-10.0F), degToRadF(80.0F) }, degToRadF(15.0F), degToRadF(15.0F) };
 

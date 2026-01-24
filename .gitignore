@@ -29,3 +29,5 @@ lib_deps_external/
 .platformio/
 .pioenvs_backup/
 OnStepX.ino.cpp
+
+.kiro/

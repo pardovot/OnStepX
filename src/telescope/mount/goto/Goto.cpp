@@ -15,6 +15,9 @@
 #include "../park/Park.h"
 #include "../limits/Limits.h"
 #include "../status/Status.h"
+#ifdef SUPERVISED_FEATURES
+  #include "../supervised/Supervised.h"
+#endif
 
 #if GOTO_FEATURE == ON
 inline void gotoWrapper() { goTo.poll(); }
@@ -86,6 +89,12 @@ CommandError Goto::request(Coordinate coords, PierSideSelect pierSideSelect, boo
   if (e != CE_NONE) return e;
 
   lastAlignTarget = target;
+
+  // Supervised GOTO: sync true position to virtual position before slew
+  // Requirements: 5.1, 5.2, 5.3
+  #ifdef SUPERVISED_FEATURES
+    supervised.syncTruePosToVirtualPos(target);
+  #endif
 
   #if AXIS1_SECTOR_GEAR == ON || AXIS2_TANGENT_ARM == ON
     double a1, a2;

@@ -3,6 +3,10 @@
 
 #include "Motor.h"
 
+#ifdef SUPERVISED_FEATURES
+#include "../../nv/Nv.h"
+#endif
+
 #ifdef MOTOR_PRESENT
 
 // get motor default parameters
@@ -75,6 +79,17 @@ void Motor::setInstrumentCoordinateParkSteps(long value, int modulo) {
     indexSteps = steps;
   } else setInstrumentCoordinateSteps(value);
   V(axisPrefix); VF("setInstrumentCoordinateParkSteps at "); V(indexSteps); VF(" (was "); V(value - motorSteps); VL(")");
+
+  #ifdef SUPERVISED_FEATURES
+  // If supervised home is enabled, set absoluteIndexSteps to indexSteps
+  uint8_t homeEnable = nv.readUC(NV_SUPERVISED_HOME_ENABLE);
+  if (homeEnable == SUPERVISED_ENABLED) {
+    noInterrupts();
+    absoluteIndexSteps = indexSteps;
+    interrupts();
+    VF("MSG:"); V(axisPrefix); VF("supervised home set absoluteIndexSteps to "); VL(absoluteIndexSteps);
+  }
+  #endif
 }
 
 // get target coordinate (with index), in steps

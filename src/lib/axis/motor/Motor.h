@@ -177,6 +177,27 @@ class Motor {
     volatile long step = 1;                    // step size, and for direction control
 
     float default_param1 = 0, default_param2 = 0, default_param3 = 0, default_param4 = 0, default_param5 = 0, default_param6 = 0;
+
+    #ifdef SUPERVISED_FEATURES
+    // Supervised features - absolute index tracking in steps
+    // The absolute index represents the true position offset from home in steps
+    volatile long absoluteIndexSteps = 0;
+
+    // Get the absolute index in steps
+    long getAbsoluteIndexSteps() { 
+      noInterrupts();
+      long steps = absoluteIndexSteps;
+      interrupts();
+      return steps;
+    }
+
+    // Set the absolute index in steps
+    void setAbsoluteIndexSteps(long value) {
+      noInterrupts();
+      absoluteIndexSteps = value;
+      interrupts();
+    }
+    #endif
 };
 
 #endif

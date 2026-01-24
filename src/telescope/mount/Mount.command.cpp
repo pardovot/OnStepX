@@ -14,6 +14,10 @@
 #include "limits/Limits.h"
 #include "park/Park.h"
 
+#ifdef SUPERVISED_FEATURES
+#include "supervised/Supervised.h"
+#endif
+
 bool Mount::command(char *reply, char *command, char *parameter, bool *supressFrame, bool *numericReply, CommandError *commandError) {
   char *conv_end;
   PrecisionMode precisionMode = PM_HIGH;
@@ -413,7 +417,18 @@ bool Mount::command(char *reply, char *command, char *parameter, bool *supressFr
         trackingRateOffsetRA = f/15.0F;
       } else return false;
 
-    } else return false;
+    } else
+
+    // Route supervised feature commands (:SH, :SR, :SG, :SM, :SD)
+    // Requirements: 7.1-7.14
+    #ifdef SUPERVISED_FEATURES
+    if (command[1] == 'H' || command[1] == 'R' || command[1] == 'G' || 
+        command[1] == 'M' || command[1] == 'D') {
+      return supervised.command(reply, command, parameter, supressFrame, numericReply, commandError);
+    } else
+    #endif
+
+    return false;
   } else
 
   // T - Tracking Commands

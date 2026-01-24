@@ -180,4 +180,21 @@
 #define NV_ELECTRONIC_HOMING_BASE   885    // bytes: 1   , 1
 #define NV_AUTO_TRACKING_BASE       886    // bytes: 1   , 1
 
-#define NV_LAST                     887
+#define NV_SUPERVISED_BASE          887   // bytes: 16  , 16
+// Named addresses for supervised NV storage
+#define NV_SUPERVISED_AXIS1_POS           (NV_SUPERVISED_BASE + 0)   // float, 4 bytes
+#define NV_SUPERVISED_AXIS2_POS           (NV_SUPERVISED_BASE + 4)   // float, 4 bytes
+#define NV_SUPERVISED_RA_LIMIT_EAST       (NV_SUPERVISED_BASE + 8)   // uint8_t
+#define NV_SUPERVISED_RA_LIMIT_WEST       (NV_SUPERVISED_BASE + 9)   // uint8_t
+#define NV_SUPERVISED_HOME_ENABLE         (NV_SUPERVISED_BASE + 10)  // uint8_t
+#define NV_SUPERVISED_RA_LIMIT_ENABLE     (NV_SUPERVISED_BASE + 11)  // uint8_t
+#define NV_SUPERVISED_GOTO_ENABLE         (NV_SUPERVISED_BASE + 12)  // uint8_t
+#define NV_SUPERVISED_SYNC_THRESHOLD      (NV_SUPERVISED_BASE + 13)  // uint8_t
+#define NV_SUPERVISED_MEMORY_ENABLE       (NV_SUPERVISED_BASE + 14)  // uint8_t
+#define NV_SUPERVISED_MOUNT_TYPE          (NV_SUPERVISED_BASE + 15)  // uint8_t
+
+// NV storage uses 0xFF for enabled (erased EEPROM default) and 0x00 for disabled
+#define SUPERVISED_ENABLED          0xFF
+#define SUPERVISED_DISABLED         0x00
+
+#define NV_LAST                     903

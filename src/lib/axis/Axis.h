@@ -325,6 +325,21 @@ class Axis {
 
     bool commonMinMaxSense = false;
 
+    #ifdef SUPERVISED_FEATURES
+    // Supervised features - absolute index tracking
+    // The absolute index represents the true position offset from home in radians
+    double absoluteIndex = 0.0;
+
+    // get the absolute index value in radians
+    double getAbsoluteIndex() { return absoluteIndex; }
+
+    // set the absolute index value in radians
+    void setAbsoluteIndex(double value) { absoluteIndex = value; }
+
+    // get the true position (motorPosition + absoluteIndex) in radians
+    double getTruePosition() { return getMotorPosition() + absoluteIndex; }
+    #endif
+
   private:
     // set frequency in "measures" (degrees, microns, etc.) per second (0 stops motion)
     void setFrequency(float frequency);

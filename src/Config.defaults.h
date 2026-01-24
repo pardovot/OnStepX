@@ -617,6 +617,16 @@
 #define MOUNT_HORIZON_AVOIDANCE       ON                          // ON allows eq mode horizon avoidance
 #endif
 
+// supervised features - enhanced position tracking for mounts without absolute encoders
+#ifndef SUPERVISED_FEATURES
+#define SUPERVISED_FEATURES           OFF                         // OFF disables all supervised features
+#endif
+
+// supervised features default values
+#define SUPERVISED_RA_LIMIT_DEFAULT       95                      // default RA limit in degrees (1-180 range)
+#define SUPERVISED_SYNC_THRESHOLD_DEFAULT 15                      // default GOTO sync threshold in degrees (5-30 range)
+#define SUPERVISED_CENTERING_TOLERANCE    10.0                    // centering detection tolerance in degrees
+
 #ifndef AXIS1_TARGET_TOLERANCE
 #define AXIS1_TARGET_TOLERANCE        0.0F                        // distance in arc-seconds when goto is at destination
 #endif

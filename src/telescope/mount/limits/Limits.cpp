@@ -13,6 +13,10 @@
 #include "../guide/Guide.h"
 #include "../site/Site.h"
 
+#ifdef SUPERVISED_FEATURES
+#include "../supervised/Supervised.h"
+#endif
+
 inline void limitsWrapper() { limits.poll(); }
 
 void Limits::init() {
@@ -29,6 +33,12 @@ void Limits::init() {
   nv.readBytes(NV_MOUNT_LIMITS_BASE, &settings, sizeof(LimitSettings));
 
   constrainMeridianLimits();
+
+  // Initialize supervised error state
+  #ifdef SUPERVISED_FEATURES
+  supervisedError.east = false;
+  supervisedError.west = false;
+  #endif
 
   // start limit monitor task
   VF("MSG: Mount, limits start monitor task (rate 100ms priority 2)... ");
@@ -187,7 +197,7 @@ CommandError Limits::validateTarget(Coordinate *coords, bool *eastReachable, boo
 
 // true if an error exists
 bool Limits::isError() {
-  return initError.nv ||
+  bool hasError = initError.nv ||
          initError.value ||
          initError.tls ||
          error.altitude.min ||
@@ -202,6 +212,12 @@ bool Limits::isError() {
          error.limitSense.axis2.max ||
          error.meridian.east ||
          error.meridian.west;
+  
+  #ifdef SUPERVISED_FEATURES
+  hasError = hasError || supervisedError.east || supervisedError.west;
+  #endif
+  
+  return hasError;
 }
 
 // true if an error exists that impacts goto safety
@@ -268,6 +284,51 @@ void Limits::stopAxis2(GuideAction stopDirection) {
   guide.stopAxis2(stopDirection, true);
   if (!transform.isEquatorial()) mount.tracking(false);
 }
+
+#ifdef SUPERVISED_FEATURES
+// Check supervised RA limits based on true motor position
+void Limits::checkSupervisedRaLimits() {
+  // Only check if supervised RA limits are enabled
+  if (!supervised.raLimitEnabled()) {
+    supervisedError.east = false;
+    supervisedError.west = false;
+    return;
+  }
+  
+  // Only check for GEM mounts
+  if (transform.mountType != GEM) {
+    supervisedError.east = false;
+    supervisedError.west = false;
+    return;
+  }
+  
+  SupervisedRaLimitError lastSupervisedError = supervisedError;
+  
+  // Call the Supervised class to check limits
+  int limitResult = supervised.checkRaLimits();
+  
+  if (limitResult == 1) {
+    // East limit exceeded - stop reverse motion
+    supervisedError.east = true;
+    supervisedError.west = false;
+    if (!lastSupervisedError.east) {
+      DLF("WRN: Mount, supervised RA east limit exceeded");
+      stopAxis1(GA_REVERSE);
+    }
+  } else if (limitResult == 2) {
+    // West limit exceeded - stop forward motion
+    supervisedError.east = false;
+    supervisedError.west = true;
+    if (!lastSupervisedError.west) {
+      DLF("WRN: Mount, supervised RA west limit exceeded");
+      stopAxis1(GA_FORWARD);
+    }
+  } else {
+    supervisedError.east = false;
+    supervisedError.west = false;
+  }
+}
+#endif
 
 void Limits::poll() {
   static int autoFlipDelayCycles = 0;
@@ -415,6 +476,11 @@ void Limits::poll() {
     if (!axis2.commonMinMaxSense || lastError.limitSense.axis2.max != error.limitSense.axis2.max)
       stopAxis2((current.pierSide == PIER_SIDE_EAST) ? GA_FORWARD : GA_REVERSE);
   }
+
+  // Check supervised RA limits (motor-based limits independent of coordinate system)
+  #ifdef SUPERVISED_FEATURES
+  checkSupervisedRaLimits();
+  #endif
 
   #if DEBUG == VERBOSE
     const char* errPre = "MSG: Mount, error state: ";

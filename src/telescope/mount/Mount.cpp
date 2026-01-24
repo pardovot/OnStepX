@@ -20,6 +20,14 @@
 #include "st4/St4.h"
 #include "status/Status.h"
 
+#ifdef SUPERVISED_FEATURES
+#include "supervised/Supervised.h"
+#endif
+
+#if MOUNT_COORDS_MEMORY == ON && NV_ENDURANCE < NVE_VHIGH
+  #error "Configuration (Config.h): Setting MOUNT_COORDS_MEMORY requires a NV storage device with very high write endurance (FRAM)"
+#endif
+
 inline void mountWrapper() { mount.poll(); }
 inline void autostartWrapper() { mount.autostartPostponed(); }
 
@@ -127,6 +135,16 @@ void Mount::begin() {
 
   #if ALIGN_MAX_NUM_STARS > 1 && ALIGN_MODEL_MEMORY == ON
     transform.align.modelRead();
+  #endif
+
+  // Initialize supervised features
+  #ifdef SUPERVISED_FEATURES
+    supervised.init();
+    // Restore positions if memory enabled and conditions met
+    // Requirements: 3.2, 8.3
+    if (supervised.memoryEnabled() && !goTo.absoluteEncodersPresent && park.state != PS_PARKED) {
+      supervised.restorePositions();
+    }
   #endif
 
   VF("MSG: Mount, start tracking monitor task (rate 1000ms priority 6)... ");
@@ -317,6 +335,12 @@ void Mount::poll() {
       nv.write(NV_MOUNT_LAST_POSITION + 5, (float)axis2.getInstrumentCoordinate());
       nv.ignoreCache(false);
     }
+  #endif
+
+  // Supervised features polling for position saving
+  // Requirements: 3.1
+  #ifdef SUPERVISED_FEATURES
+    supervised.poll();
   #endif
 
   if (trackingState == TS_NONE) {
