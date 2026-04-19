@@ -126,17 +126,6 @@ bool Features::command(char *reply, char *command, char *parameter, bool *supres
 
       if (device[i].purpose == SWITCH || device[i].purpose == MOMENTARY_SWITCH || device[i].purpose == COVER_SWITCH) {
         if (parameter[3] == 'V') {
-          if (device[i].name == "ElecHoming") {
-            mount.electronicHoming = v;
-            nv.write(NV_ELECTRONIC_HOMING_BASE, mount.electronicHoming);
-          }
-
-          if (device[i].name == "AutoTrack") {
-            mount.autoTracking = v;
-            VF("MSG: AutoTracking "); V(mount.autoTracking); VF("\n");
-            nv.write(NV_AUTO_TRACKING_BASE, mount.autoTracking);
-          }
-
           if (v >= 0 && v <= 1) { // value 0..1 for enabled or not
             #ifdef COVER_SWITCH_SERVO_PRESENT
             if (device[i].purpose == COVER_SWITCH) {

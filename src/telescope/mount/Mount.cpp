@@ -31,22 +31,10 @@ void Mount::init() {
   if (!nv.hasValidKey()) {
     VLF("MSG: Mount, writing defaults to NV");
     nv.writeBytes(NV_MOUNT_SETTINGS_BASE, &settings, sizeof(MountSettings));
-    nv.write(NV_ELECTRONIC_HOMING_BASE, mount.electronicHoming);
-    nv.write(NV_AUTO_TRACKING_BASE, mount.autoTracking);
   }
 
   // read the settings
   nv.readBytes(NV_MOUNT_SETTINGS_BASE, &settings, sizeof(MountSettings));
-
-  #if MOUNT_COORDS_MEMORY == ON
-    mount.electronicHoming = nv.read(NV_ELECTRONIC_HOMING_BASE);
-    VF("MSG: Mount, restoring electronicHoming ("); V(mount.electronicHoming); VL(")");
-  #endif
-
-  #if TRACK_AUTOSTART_MEMORY == ON
-    mount.autoTracking = nv.read(NV_AUTO_TRACKING_BASE);
-    VF("MSG: Mount, restoring autoTracking ("); V(mount.autoTracking); VL(")");
-  #endif
 
   // get the main axes ready
   delay(100);
@@ -112,7 +100,7 @@ void Mount::begin() {
 
   // restore where we were pointing
   #if MOUNT_COORDS_MEMORY == ON
-    if (!goTo.absoluteEncodersPresent && park.state != PS_PARKED && mount.electronicHoming == 1) {
+    if (!goTo.absoluteEncodersPresent && park.state != PS_PARKED) {
       int8_t lastMountType = nv.readC(NV_MOUNT_LAST_POSITION);
       if (transform.mountType == lastMountType) {
         VLF("MSG: Mount, reading last position");
@@ -167,7 +155,7 @@ void Mount::autostartPostponed() {
 
   // handle the one case where this completes without the date/time available
   static bool autoTrackDone = false;
-  if (!autoTrackDone && (TRACK_AUTOSTART == ON || mount.autoTracking == 1) && transform.isEquatorial() && park.state != PS_PARKED && !home.settings.automaticAtBoot) {
+  if (!autoTrackDone && TRACK_AUTOSTART == ON && transform.isEquatorial() && park.state != PS_PARKED && !home.settings.automaticAtBoot) {
     VLF("MSG: Mount, autostart tracking sidereal");
     tracking(true);
     trackingRate = hzToSidereal(SIDEREAL_RATE_HZ);
@@ -210,7 +198,7 @@ void Mount::autostartPostponed() {
   if (home.state == HS_HOMING) return;
 
   // auto tracking
-  if (!autoTrackDone && (TRACK_AUTOSTART == ON || mount.autoTracking == 1)) {
+  if (!autoTrackDone && TRACK_AUTOSTART == ON) {
     VLF("MSG: Mount, autostart tracking sidereal");
     tracking(true);
     trackingRate = hzToSidereal(SIDEREAL_RATE_HZ);
@@ -310,7 +298,7 @@ void Mount::poll() {
 
   // keep track of where we are pointing
   #if MOUNT_COORDS_MEMORY == ON
-    if (!goTo.absoluteEncodersPresent && mount.electronicHoming == 1) {
+    if (!goTo.absoluteEncodersPresent) {
       nv.ignoreCache(true);
       nv.write(NV_MOUNT_LAST_POSITION, transform.mountType);
       nv.write(NV_MOUNT_LAST_POSITION + 1, (float)axis1.getInstrumentCoordinate());
