@@ -238,7 +238,12 @@ CommandError Goto::setTarget(Coordinate *coords, PierSideSelect pierSideSelect, 
 
   bool pierSideBest = false;
   if (pierSideSelect == PSS_BEST) {
-    if (current.pierSide == PIER_SIDE_WEST) pierSideSelect = PSS_WEST; else pierSideSelect = PSS_EAST;
+    if (isGoto && transform.mountType == GEM) {
+      // GOTO PSS_BEST on GEM: meridian (HA=0) is static; pier follows HA sign.
+      if (target.h < 0) pierSideSelect = PSS_WEST; else pierSideSelect = PSS_EAST;
+    } else {
+      if (current.pierSide == PIER_SIDE_WEST) pierSideSelect = PSS_WEST; else pierSideSelect = PSS_EAST;
+    }
     pierSideBest = true;
   }
   if (pierSideSelect == PSS_SAME_ONLY) {
@@ -277,13 +282,19 @@ CommandError Goto::setTarget(Coordinate *coords, PierSideSelect pierSideSelect, 
   if (dist(a1, a1e) > dist(a2, a2e)) eastDistance = dist(a1, a1e); else eastDistance = dist(a2, a2e);
   if (dist(a1, a1w) > dist(a2, a2w)) westDistance = dist(a1, a1w); else westDistance = dist(a2, a2w);
 
-  if (mount.isHome() && transform.mountType == GEM) {
+  // Home + sync on GEM: pier follows HA sign regardless of caller's preferredPierSide.
+  // Guardrail against syncing to a pier that disagrees with the physical OTA orientation
+  // at home. Goto case handled upfront.
+  if (mount.isHome() && transform.mountType == GEM && !isGoto) {
     VLF("MSG: Mount, set-target destination from home based on HA");
     if (target.h < 0) pierSideSelect = PSS_WEST; else pierSideSelect = PSS_EAST;
     pierSideBest = true;
   }
 
   target.pierSide = PIER_SIDE_NONE;
+
+  // Distance fallback is skipped on GEM when pierSideBest: HA-rule already picked the side and is final.
+  bool allowDistanceFallback = !(pierSideBest && transform.mountType == GEM);
 
   if (pierSideSelect == PSS_EAST_ONLY) {
     VLF("MSG: Mount, set-target using PPS_EAST_ONLY");
@@ -296,16 +307,16 @@ CommandError Goto::setTarget(Coordinate *coords, PierSideSelect pierSideSelect, 
   if (pierSideSelect == PSS_EAST) {
     VLF("MSG: Mount, set-target using PPS_EAST");
     if (westReachable && !eastReachable) target.pierSide = PIER_SIDE_WEST; else
-    if (isGoto && westReachable && pierSideBest && westDistance < eastDistance) {
+    if (isGoto && westReachable && pierSideBest && allowDistanceFallback && westDistance < eastDistance) {
       VLF("MSG: Mount, set-target destination in alternate (W) orientation is closer");
-      target.pierSide = PIER_SIDE_WEST; 
+      target.pierSide = PIER_SIDE_WEST;
     } else
     if (eastReachable) target.pierSide = PIER_SIDE_EAST;
   } else
   if (pierSideSelect == PSS_WEST) {
     VLF("MSG: Mount, set-target using PPS_WEST");
     if (eastReachable && !westReachable) target.pierSide = PIER_SIDE_EAST; else
-    if (isGoto && eastReachable && pierSideBest && eastDistance < westDistance) {
+    if (isGoto && eastReachable && pierSideBest && allowDistanceFallback && eastDistance < westDistance) {
       VLF("MSG: Mount, set-target destination in normal (E) orientation is closer");
       target.pierSide = PIER_SIDE_EAST;
     } else
