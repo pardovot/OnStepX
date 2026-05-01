@@ -2,6 +2,7 @@
 // telescope mount control, sync and goto
 
 #include "Goto.h"
+#include "../absoluteMotorPosition/AbsoluteMotorPosition.h"
 
 #if defined(MOUNT_PRESENT)
 
@@ -129,6 +130,10 @@ CommandError Goto::request(Coordinate coords, PierSideSelect pierSideSelect, boo
   }
 
   // prepare for goto
+  #if ABSOLUTE_MOTOR_POSITION == ON
+    amp.applyDriftCorrection();
+  #endif
+  
   Coordinate current = mount.getMountPosition(CR_MOUNT_HOR);
   state = GS_GOTO;
   stage = GG_NEAR_DESTINATION_START;

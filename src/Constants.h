@@ -177,4 +177,8 @@
 #define NV_FEATURE_SETTINGS_BASE    844    // bytes: 5 *8, 40
 #define NV_TELESCOPE_SETTINGS_BASE  884    // bytes: 2   , 2
 
-#define NV_LAST                     885
+#define NV_AMP_SETTINGS_BASE        886    // bytes: 16  , 16
+#define NV_AMP_POSITION_BASE        902    // bytes: 8   , 8
+#define NV_AMP_HOMED_BASE           910    // bytes: 1   , 1
+
+#define NV_LAST                     910

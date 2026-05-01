@@ -16,6 +16,7 @@
 #include "mount/home/Home.h"
 #include "mount/library/Library.h"
 #include "mount/limits/Limits.h"
+#include "mount/absoluteMotorPosition/AbsoluteMotorPosition.h"
 #include "mount/park/Park.h"
 #include "mount/pec/Pec.h"
 #include "mount/site/Site.h"
@@ -41,6 +42,9 @@ bool Telescope::command(char reply[], char command[], char parameter[], bool *su
     if (library.command(reply, command, parameter, supressFrame, numericReply, commandError)) return true;
     if (site.command(reply, command, parameter, supressFrame, numericReply, commandError)) return true;
     if (limits.command(reply, command, parameter, supressFrame, numericReply, commandError)) return true;
+    #if ABSOLUTE_MOTOR_POSITION == ON
+      if (amp.command(reply, command, parameter, supressFrame, numericReply, commandError)) return true;
+    #endif
     if (home.command(reply, command, parameter, supressFrame, numericReply, commandError)) return true;
     if (pec.command(reply, command, parameter, supressFrame, numericReply, commandError)) return true;
     if (axis1.command(reply, command, parameter, supressFrame, numericReply, commandError)) return true;

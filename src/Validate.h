@@ -332,6 +332,14 @@
   #error "Configuration (Config.h): Setting MOUNT_COORDS_MEMORY requires a NV storage device with very high write endurance (FRAM)"
 #endif
 
+#if ABSOLUTE_MOTOR_POSITION != ON && ABSOLUTE_MOTOR_POSITION != OFF
+  #error "Configuration (Config.h): Setting ABSOLUTE_MOTOR_POSITION unknown, use ON or OFF"
+#endif
+
+#if ABSOLUTE_MOTOR_POSITION == ON && NV_ENDURANCE < NVE_VHIGH
+  #error "Configuration (Config.h): Setting ABSOLUTE_MOTOR_POSITION requires a NV storage device with very high write endurance (FRAM)"
+#endif
+
 #if MOUNT_ENABLE_IN_STANDBY != ON && MOUNT_ENABLE_IN_STANDBY != OFF
   #error "Configuration (Config.h): Setting MOUNT_ENABLE_IN_STANDBY unknown, use ON or OFF"
 #endif

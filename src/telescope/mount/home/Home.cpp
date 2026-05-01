@@ -2,6 +2,7 @@
 // telescope mount control, homing
 
 #include "Home.h"
+#include "../absoluteMotorPosition/AbsoluteMotorPosition.h"
 
 #ifdef MOUNT_PRESENT
 
@@ -240,6 +241,9 @@ CommandError Home::reset(bool fullReset) {
       axis1.setInstrumentCoordinate(position.a1);
       axis2.setInstrumentCoordinate(position.a2);
     }
+    #if ABSOLUTE_MOTOR_POSITION == ON
+      amp.resetOnHome();
+    #endif
   }
 
   axis1.setBacklash(mount.settings.backlash.axis1);

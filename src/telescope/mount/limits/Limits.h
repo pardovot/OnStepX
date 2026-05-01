@@ -77,12 +77,13 @@ class Limits {
 
     void poll();
 
-    LimitSettings settings = { { degToRadF(-10.0F), degToRadF(80.0F) }, degToRadF(15.0F), degToRadF(15.0F) };
-
-  private:
     void stop();
     void stopAxis1(GuideAction stopDirection = GA_BREAK);
     void stopAxis2(GuideAction stopDirection = GA_BREAK);
+
+    LimitSettings settings = { { degToRadF(-10.0F), degToRadF(80.0F) }, degToRadF(15.0F), degToRadF(15.0F) };
+
+  private:
     // get least distance between coordinates
     inline double dist(double a, double b) { if (a > b) return a - b; else return b - a; }
 

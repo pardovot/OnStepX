@@ -607,6 +607,21 @@
 #ifndef MOUNT_COORDS_MEMORY
 #define MOUNT_COORDS_MEMORY           OFF                         // ON Enables mount position memory
 #endif
+#ifndef ABSOLUTE_MOTOR_POSITION
+#define ABSOLUTE_MOTOR_POSITION       OFF                         // ON Enables absolute motor position safety system
+#endif
+#ifndef AMP_DRIFT_THRESHOLD_DEG
+#define AMP_DRIFT_THRESHOLD_DEG       15.0                        // drift correction threshold in degrees
+#endif
+#ifndef AMP_RA_EAST_LIMIT_DEG
+#define AMP_RA_EAST_LIMIT_DEG         95.0                        // RA east limit, degrees from home
+#endif
+#ifndef AMP_RA_WEST_LIMIT_DEG
+#define AMP_RA_WEST_LIMIT_DEG         95.0                        // RA west limit, degrees from home
+#endif
+#ifndef AMP_HORIZON_LIMIT_DEG
+#define AMP_HORIZON_LIMIT_DEG         -10.0                       // altitude minimum limit in degrees
+#endif
 #ifndef MOUNT_ENABLE_IN_STANDBY
 #define MOUNT_ENABLE_IN_STANDBY       OFF                         // ON Enables mount motor drivers in standby
 #endif

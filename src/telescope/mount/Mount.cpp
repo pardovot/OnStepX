@@ -19,6 +19,7 @@
 #include "site/Site.h"
 #include "st4/St4.h"
 #include "status/Status.h"
+#include "absoluteMotorPosition/AbsoluteMotorPosition.h"
 
 inline void mountWrapper() { mount.poll(); }
 inline void autostartWrapper() { mount.autostartPostponed(); }
@@ -74,6 +75,9 @@ void Mount::begin() {
   }
 
   // initialize the other subsystems
+  #if ABSOLUTE_MOTOR_POSITION == ON
+    amp.init();
+  #endif
   home.reset();
   limits.init();
   guide.init();
@@ -305,6 +309,10 @@ void Mount::poll() {
       nv.write(NV_MOUNT_LAST_POSITION + 5, (float)axis2.getInstrumentCoordinate());
       nv.ignoreCache(false);
     }
+  #endif
+
+  #if ABSOLUTE_MOTOR_POSITION == ON
+    amp.savePosition();
   #endif
 
   if (trackingState == TS_NONE) {

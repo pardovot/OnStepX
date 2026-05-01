@@ -2,6 +2,7 @@
 // telescope mount control, limits
 
 #include "Limits.h"
+#include "../absoluteMotorPosition/AbsoluteMotorPosition.h"
 
 #ifdef MOUNT_PRESENT
 
@@ -213,7 +214,11 @@ bool Limits::isGotoError() {
          error.limitSense.axis1.min ||
          error.limitSense.axis1.max ||
          error.limitSense.axis2.min ||
-         error.limitSense.axis2.max;
+         error.limitSense.axis2.max
+         #if ABSOLUTE_MOTOR_POSITION == ON
+           || amp.errorEast || amp.errorWest || amp.errorHorizon
+         #endif
+         ;
 }
 
 // return general error code
@@ -221,12 +226,18 @@ uint8_t Limits::errorCode() {
   enum GeneralErrors: uint8_t {
   ERR_NONE, ERR_MOTOR_FAULT, ERR_ALT_MIN, ERR_LIMIT_SENSE, ERR_DEC, ERR_AZM,
   ERR_UNDER_POLE, ERR_MERIDIAN, ERR_SYNC, ERR_PARK, ERR_GOTO_SYNC, ERR_UNSPECIFIED,
-  ERR_ALT_MAX, ERR_WEATHER_INIT, ERR_SITE_INIT, ERR_NV_INIT};
+  ERR_ALT_MAX, ERR_WEATHER_INIT, ERR_SITE_INIT, ERR_NV_INIT,
+  ERR_AMP_EAST, ERR_AMP_WEST, ERR_AMP_HORIZON};
 
   // priority highest to lowest
   if (mount.motorFault()) return (uint8_t)ERR_MOTOR_FAULT;
   if (error.limitSense.axis1.min || error.limitSense.axis1.max ||
       error.limitSense.axis2.min || error.limitSense.axis2.max) return (uint8_t)ERR_LIMIT_SENSE;
+  #if ABSOLUTE_MOTOR_POSITION == ON
+    if (amp.errorEast)    return (uint8_t)ERR_AMP_EAST;
+    if (amp.errorWest)    return (uint8_t)ERR_AMP_WEST;
+    if (amp.errorHorizon) return (uint8_t)ERR_AMP_HORIZON;
+  #endif
   if (error.altitude.min) return (uint8_t)ERR_ALT_MIN;
   if (error.altitude.max) return (uint8_t)ERR_ALT_MAX;
   if (transform.isEquatorial()) {
@@ -381,6 +392,13 @@ void Limits::poll() {
       stopAxis2((current.pierSide == PIER_SIDE_EAST) ? GA_FORWARD : GA_REVERSE);
       error.limit.axis2.max = true;
     } else error.limit.axis2.max = false;
+
+    #if ABSOLUTE_MOTOR_POSITION == ON
+      amp.checkLimits();
+      if (amp.errorEast) error.limit.axis1.min = true;
+      if (amp.errorWest) error.limit.axis1.max = true;
+      if (amp.errorHorizon) error.altitude.min = true;
+    #endif
 
   } else {
     error.altitude.min = false;
