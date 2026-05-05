@@ -4,7 +4,7 @@ Automated serial tests for meridian flip redesign.
 
 Goal: verify pier-side selection on GEM for PSS_BEST GOTO follows HA sign
 (meridian static at HA=0), and that pastMeridianE/W act only as motion
-limits — not as reachability/selection narrowing.
+limits - not as reachability/selection narrowing.
 
 Tests:
   case_1_at_meridian        : HA=0,  curr=WEST, BEST -> EAST
@@ -21,7 +21,7 @@ Tests:
 Prereq:
   - GEM mount, stepper, no encoders (user default)
   - PIER_SIDE_SYNC_CHANGE_SIDES = OFF (default)
-  - Clearance around mount — tests slew across meridian
+  - Clearance around mount - tests slew across meridian
   - Mount homed on startup (EAST pier by convention)
 
 OnStepX commands used:
@@ -42,8 +42,16 @@ import serial
 import time
 import argparse
 import sys
+import json
+import os
+from typing import List
 from colorama import init, Fore
 init(autoreset=True)
+
+
+LAST_FAILED_FILE = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), '.meridian_last_failed.json'
+)
 
 
 TEST_DEC_NORTH = "+45:00:00"   # safe Dec for all HAs, stays well above horizon
@@ -63,6 +71,7 @@ class MeridianFlipTester:
         self.ser = None
         self.results = []
         self.lst = 0.0
+        self._current_test_key = None
         self.available_tests = {
             'case_1_at_meridian':       ('Case 1: HA=0 WEST -> EAST',         self.test_case_1_at_meridian),
             'case_2_past_meridian':     ('Case 2: HA=+1 WEST -> EAST',        self.test_case_2_past_meridian),
@@ -123,7 +132,10 @@ class MeridianFlipTester:
         print(f"  {tag} - {name}")
         if details:
             print(f"       {Fore.CYAN}{details}")
-        self.results.append({'name': name, 'ok': ok, 'details': details})
+        self.results.append({
+            'name': name, 'ok': ok, 'details': details,
+            'test_key': self._current_test_key,
+        })
 
     def info(self, msg):
         print(f"  {Fore.CYAN}ℹ {msg}")
@@ -135,7 +147,7 @@ class MeridianFlipTester:
         print(f"  {Fore.YELLOW}⏳ {msg}")
 
     def log_state(self, label="state"):
-        """Dump RA, Dec, HA, pier, LST, status — crucial for failure diagnosis."""
+        """Dump RA, Dec, HA, pier, LST, status - crucial for failure diagnosis."""
         print(f"  {Fore.MAGENTA}── mount state [{label}] ──")
         ra = self.send(":GR#", quiet=True)
         dec = self.send(":GD#", quiet=True)
@@ -181,7 +193,7 @@ class MeridianFlipTester:
         self.info(f"Cached LST = {self.lst:.4f}h")
 
     def home(self):
-        """Set home (:hF#). Pier reads 'N' until next GOTO commits it — expected."""
+        """Set home (:hF#). Pier reads 'N' until next GOTO commits it - expected."""
         self.step("Tracking off (:Td#) then set home (:hF#)")
         self.send(":Td#", wait_ms=100)
         self.send(":hF#")
@@ -225,7 +237,7 @@ class MeridianFlipTester:
         r = self.send(":MS#")
         self.info(f":MS# reply='{r}'  ({'ACCEPTED' if r == '0' else 'REJECTED'})")
         if r != '0':
-            self.warn(f"GOTO rejected with code '{r}' — returning early")
+            self.warn(f"GOTO rejected with code '{r}' - returning early")
             return None, r
         self.wait_for_slew()
         p = self.pier(quiet=True)
@@ -267,7 +279,7 @@ class MeridianFlipTester:
         return pier
 
     def position_on_east_pier(self):
-        """Home the mount — EAST is home convention. pier='N' is accepted
+        """Home the mount - EAST is home convention. pier='N' is accepted
         (OnStepX doesn't commit pier until first GOTO/tracking)."""
         print(f"\n  {Fore.YELLOW}── Positioning on EAST pier (home) ──")
         self.home()
@@ -305,7 +317,7 @@ class MeridianFlipTester:
         start_pier = self.pier()
         self.log("Positioned WEST pier", start_pier == 'W', f"pier='{start_pier}'")
         if start_pier != 'W':
-            self.warn("Cannot continue — did not reach WEST pier")
+            self.warn("Cannot continue - did not reach WEST pier")
             return
 
         self.info("Expecting: GOTO to HA=0 flips to EAST (HA-rule: h<0 is false → PSS_EAST)")
@@ -323,7 +335,7 @@ class MeridianFlipTester:
         start_pier = self.pier()
         self.log("Positioned WEST pier", start_pier == 'W', f"pier='{start_pier}'")
         if start_pier != 'W':
-            self.warn("Cannot continue — did not reach WEST pier")
+            self.warn("Cannot continue - did not reach WEST pier")
             return
 
         self.info("Expecting: GOTO to HA=+1 flips to EAST despite WEST being physically closer.")
@@ -361,7 +373,7 @@ class MeridianFlipTester:
         self.log("Positioned EAST pier (home)", start_pier in ('E', 'N'),
                  f"pier='{start_pier}' (N=uncommitted home, both accepted)")
         if start_pier not in ('E', 'N'):
-            self.warn("Cannot continue — not at home")
+            self.warn("Cannot continue - not at home")
             return
 
         self.info("Expecting: HA=+1 on EAST pier stays EAST (no flip)")
@@ -374,7 +386,7 @@ class MeridianFlipTester:
     def test_static_meridian_vs_pastW(self):
         self._banner("B1: pastMeridianW=+15, HA=+2 on WEST, PSS_BEST -> flip EAST (meridian static)")
         self.setup_site()
-        self.info("Expanding pastMeridianW to +15° — meridian must stay static at HA=0 regardless")
+        self.info("Expanding pastMeridianW to +15° - meridian must stay static at HA=0 regardless")
         r1 = self.set_past_meridian_w(15)
         self.log("set pastMeridianW=15", r1 == '1' or r1 == '', f"reply='{r1}' (empty OK on some builds)")
         self.set_past_meridian_e(5)
@@ -389,7 +401,7 @@ class MeridianFlipTester:
             self.reset_past_meridian()
             return
 
-        self.info("Expecting: HA=+2 on WEST (within pastW=+15) still flips EAST — meridian is static at HA=0")
+        self.info("Expecting: HA=+2 on WEST (within pastW=+15) still flips EAST - meridian is static at HA=0")
         self.lst = self.get_lst_hours()
         pier, rc = self.goto_ha(+2.0, label="target HA=+2h (within pastW=15)")
         self.log("GOTO accepted", rc == '0', f":MS# reply='{rc}'")
@@ -435,7 +447,7 @@ class MeridianFlipTester:
         self.log("Positioned EAST pier", start_pier in ('E', 'N'),
                  f"pier='{start_pier}' (N=uncommitted home, both accepted)")
         if start_pier not in ('E', 'N'):
-            self.warn("Cannot continue — not at home")
+            self.warn("Cannot continue - not at home")
             return
 
         self.info("Expecting: HA=-0.1 (just negative) flips WEST (HA<0 → PSS_WEST)")
@@ -456,7 +468,7 @@ class MeridianFlipTester:
             self.warn("Cannot continue")
             return
 
-        self.info("Crafting a sync target at HA=+1h — HA-sign suggests EAST but this is a sync, not GOTO")
+        self.info("Crafting a sync target at HA=+1h - HA-sign suggests EAST but this is a sync, not GOTO")
         self.info("PIER_SIDE_SYNC_CHANGE_SIDES=OFF forces PSS_SAME_ONLY for non-home sync, so pier stays WEST")
         self.lst = self.get_lst_hours()
         ra = self.ha_to_ra_str(+1.0)
@@ -471,7 +483,7 @@ class MeridianFlipTester:
 
         end_pier = self.pier()
         self.log("Pier unchanged by sync", end_pier == 'W',
-                 f"before='W', after='{end_pier}' — sync must not flip pier when not at home")
+                 f"before='W', after='{end_pier}' - sync must not flip pier when not at home")
 
     def _home_sync_guardrail(self, preferred, ha_hours, expect_pier):
         """At home+GEM, HA-rule must override preferredPierSide on sync."""
@@ -481,7 +493,7 @@ class MeridianFlipTester:
         start_pier = self.pier()
         self.log("At home", start_pier in ('E', 'N'), f"pier='{start_pier}'")
         if start_pier not in ('E', 'N'):
-            self.warn("Cannot continue — not at home")
+            self.warn("Cannot continue - not at home")
             return
 
         self.set_preferred_pier_side(preferred)
@@ -521,16 +533,7 @@ class MeridianFlipTester:
             if input(f"{Fore.YELLOW}Continue? (yes/no): ").strip().lower() != 'yes':
                 print("Cancelled")
                 return
-        for key, (_, fn) in self.available_tests.items():
-            print(f"\n{Fore.YELLOW}>>> Starting test: {key}")
-            try:
-                fn()
-            except Exception as e:
-                import traceback
-                traceback.print_exc()
-                self.log(f"{key} raised", False, str(e))
-            print(f"{Fore.YELLOW}<<< Finished test: {key}\n")
-        self.summary()
+        self._run_keys(list(self.available_tests.keys()))
 
     def run_one(self, key):
         if key not in self.available_tests:
@@ -541,16 +544,59 @@ class MeridianFlipTester:
             print(f"\n{Fore.RED}WARNING: this test moves the mount.")
             if input(f"{Fore.YELLOW}Continue? (yes/no): ").strip().lower() != 'yes':
                 return
-        _, fn = self.available_tests[key]
-        print(f"\n{Fore.YELLOW}>>> Starting test: {key}")
-        try:
-            fn()
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
-            self.log(f"{key} raised", False, str(e))
-        print(f"{Fore.YELLOW}<<< Finished test: {key}\n")
+        self._run_keys([key])
+
+    def run_last_failed(self):
+        keys = self._load_last_failed()
+        if not keys:
+            print(f"{Fore.YELLOW}No previously failed tests found.")
+            return
+        print(f"\n{Fore.YELLOW}Re-running {len(keys)} previously failed test(s):")
+        for k in keys:
+            name = self.available_tests[k][0]
+            print(f"  {Fore.CYAN}{k:30s} - {name}")
+        if not self.auto_confirm:
+            print(f"\n{Fore.RED}WARNING: tests move the mount.")
+            if input(f"{Fore.YELLOW}Continue? (yes/no): ").strip().lower() != 'yes':
+                return
+        self._run_keys(keys)
+
+    def _run_keys(self, keys: List[str]):
+        for key in keys:
+            print(f"\n{Fore.YELLOW}>>> Starting test: {key}")
+            self._current_test_key = key
+            try:
+                self.available_tests[key][1]()
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
+                self.log(f"{key} raised", False, str(e))
+            self._current_test_key = None
+            print(f"{Fore.YELLOW}<<< Finished test: {key}\n")
         self.summary()
+        self._save_last_failed()
+
+    def _save_last_failed(self):
+        failed_keys = sorted({
+            r['test_key'] for r in self.results
+            if not r['ok'] and r.get('test_key')
+        })
+        if failed_keys:
+            with open(LAST_FAILED_FILE, 'w') as f:
+                json.dump(failed_keys, f)
+            print(f"{Fore.YELLOW}Failed test keys saved. Re-run with --last-failed")
+        elif os.path.exists(LAST_FAILED_FILE):
+            os.remove(LAST_FAILED_FILE)
+
+    def _load_last_failed(self) -> List[str]:
+        if not os.path.exists(LAST_FAILED_FILE):
+            return []
+        try:
+            with open(LAST_FAILED_FILE) as f:
+                keys = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            return []
+        return [k for k in keys if k in self.available_tests]
 
     def list_tests(self):
         print(f"\n{Fore.CYAN}Available meridian-flip tests:")
@@ -581,6 +627,7 @@ def main():
     ap.add_argument('--timeout', type=float, default=2.0)
     ap.add_argument('--test', help='Run a single test by key')
     ap.add_argument('--list-tests', action='store_true')
+    ap.add_argument('--last-failed', action='store_true', help='Re-run tests that failed in the last run')
     ap.add_argument('--no-wait-confirm', action='store_true')
     ap.add_argument('--quiet-serial', action='store_true',
                     help='Suppress per-command serial echo (still logs high-level steps)')
@@ -605,7 +652,9 @@ def main():
     if not t.connect():
         return 1
     try:
-        if args.test:
+        if args.last_failed:
+            t.run_last_failed()
+        elif args.test:
             t.run_one(args.test)
         else:
             t.run_all()
