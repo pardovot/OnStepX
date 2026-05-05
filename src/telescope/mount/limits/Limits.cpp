@@ -97,7 +97,7 @@ CommandError Limits::validateTarget(Coordinate *coords, bool *eastReachable, boo
 
   if (transform.mountType == GEM) {
     // pastMeridianE/W are motion limits only (enforced in poll() and Guide::validAxis1).
-    // They must NOT narrow reachability here — meridian (HA=0) is static for pier-side selection.
+    // They must NOT narrow reachability here - meridian (HA=0) is static for pier-side selection.
     westLimitMin += Deg180;
     westLimitMax += Deg180;
   }

@@ -29,7 +29,7 @@ bool AbsoluteMotorPosition::command(char *reply, char *command, char *parameter,
                                     bool *supressFrame, bool *numericReply, CommandError *commandError) {
   if (command[0] != 'P' || command[1] != 'A') return false;
 
-  // :PAG[x]# — getters
+  // :PAG[x]# - getters
   if (parameter[0] == 'G' && parameter[2] == 0) {
     *numericReply = false;
     switch (parameter[1]) {
@@ -62,9 +62,9 @@ bool AbsoluteMotorPosition::command(char *reply, char *command, char *parameter,
     return true;
   }
 
-  // :PAS… — setters and special re-anchor
+  // :PAS… - setters and special re-anchor
   if (parameter[0] == 'S') {
-    // :PASz# — manual re-anchor: absoluteOffset := instrumentCoord - motorPosition.
+    // :PASz# - manual re-anchor: absoluteOffset := instrumentCoord - motorPosition.
     // sets homed=true and persists. ignoreCache used because position writes must hit FRAM
     // immediately (consistent with savePosition()), settings can ride the cache.
     if (parameter[1] == 'z' && parameter[2] == 0) {
