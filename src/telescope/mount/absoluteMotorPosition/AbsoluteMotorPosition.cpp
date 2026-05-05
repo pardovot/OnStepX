@@ -29,6 +29,7 @@ void AbsoluteMotorPosition::init() {
   absoluteOffset1 = nv.readF(NV_AMP_POSITION_BASE);
   absoluteOffset2 = nv.readF(NV_AMP_POSITION_BASE + 4);
   homed = (nv.readUC(NV_AMP_HOMED_BASE) == 1);
+  initialized = true;
 }
 
 void AbsoluteMotorPosition::savePosition() {
@@ -41,6 +42,7 @@ void AbsoluteMotorPosition::savePosition() {
 // called from Home::reset() after resetPosition(0) and setInstrumentCoordinate()
 // at this point: motorSteps=0, getInstrumentCoordinate()=Deg90 for GEM axis1
 void AbsoluteMotorPosition::resetOnHome() {
+  if (!initialized) return;
   absoluteOffset1 = axis1.getInstrumentCoordinate();
   absoluteOffset2 = axis2.getInstrumentCoordinate();
   homed = true;
@@ -54,8 +56,8 @@ void AbsoluteMotorPosition::resetOnHome() {
 void AbsoluteMotorPosition::applyDriftCorrection() {
   if (!homed) return;
 
-  // getIndexPosition() = indexSteps/stepsPerMeasure, only changes on sync — never from motor
-  // movement — so the subtraction stays small and never wraps
+  // getIndexPosition() = indexSteps/stepsPerMeasure, only changes on sync - never from motor
+  // movement - so the subtraction stays small and never wraps
   double drift1 = fabs(axis1.getIndexPosition() - absoluteOffset1);
   double drift2 = fabs(axis2.getIndexPosition() - absoluteOffset2);
 

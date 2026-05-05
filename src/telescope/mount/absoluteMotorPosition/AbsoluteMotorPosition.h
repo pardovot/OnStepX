@@ -43,6 +43,11 @@ private:
   };
 
   bool homed = false;
+
+  // gates resetOnHome() until init() has loaded NV state.
+  // boot-time home.reset() (from Mount::begin) calls resetOnHome before init runs.
+  // skipping it preserves persisted AMP state across reboots.
+  bool initialized = false;
 };
 
 extern AbsoluteMotorPosition amp;

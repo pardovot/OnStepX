@@ -74,11 +74,11 @@ void Mount::begin() {
     if (settings.rc == RC_REFRACTION) settings.rc = RC_REFRACTION_DUAL;
   }
 
+  home.reset();
   // initialize the other subsystems
   #if ABSOLUTE_MOTOR_POSITION == ON
     amp.init();
   #endif
-  home.reset();
   limits.init();
   guide.init();
 
