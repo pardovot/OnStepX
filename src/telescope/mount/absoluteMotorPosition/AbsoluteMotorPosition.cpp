@@ -20,9 +20,9 @@ void AbsoluteMotorPosition::init() {
   if (!nv.hasValidKey() || nv.isNull(NV_AMP_SETTINGS_BASE, sizeof(AmpSettings))) {
     VLF("MSG: AMP, writing defaults to NV");
     nv.writeBytes(NV_AMP_SETTINGS_BASE, &settings, sizeof(AmpSettings));
-    nv.write(NV_AMP_POSITION_BASE,     (float)0.0f);
-    nv.write(NV_AMP_POSITION_BASE + 4, (float)0.0f);
-    nv.write(NV_AMP_HOMED_BASE,        (uint8_t)0);
+    nv.write(NV_AMP_POSITION_BASE,     (float)axis1.getInstrumentCoordinate());
+    nv.write(NV_AMP_POSITION_BASE + 4, (float)axis2.getInstrumentCoordinate());
+    nv.write(NV_AMP_HOMED_BASE,        (uint8_t)1);
   }
 
   nv.readBytes(NV_AMP_SETTINGS_BASE, &settings, sizeof(AmpSettings));

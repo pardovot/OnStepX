@@ -4,9 +4,10 @@
 //   void init() {
 //     if (!nv.hasValidKey() || nv.isNull(NV_AMP_SETTINGS_BASE, sizeof(AmpSettings))) {
 //       nv.writeBytes(NV_AMP_SETTINGS_BASE, &settings, sizeof(AmpSettings));
-//       nv.write(NV_AMP_POSITION_BASE,     0.0f);
-//       nv.write(NV_AMP_POSITION_BASE + 4, 0.0f);
-//       nv.write(NV_AMP_HOMED_BASE,        (uint8_t)0);
+//       // Mount::begin ran home.reset() before us; seed offset from axis state.
+//       nv.write(NV_AMP_POSITION_BASE,     (float)axis1.getInstrumentCoordinate());
+//       nv.write(NV_AMP_POSITION_BASE + 4, (float)axis2.getInstrumentCoordinate());
+//       nv.write(NV_AMP_HOMED_BASE,        (uint8_t)1);
 //     }
 //     nv.readBytes(NV_AMP_SETTINGS_BASE, &settings, sizeof(AmpSettings));
 //     absoluteOffset1 = nv.readF(NV_AMP_POSITION_BASE);
@@ -15,7 +16,8 @@
 //   }
 //
 // Behaviors verified:
-//   - first run (no valid key OR settings null): write defaults, then read them back
+//   - first run (no valid key OR settings null): write defaults seeded from
+//     axis instrument coord (Deg90 at home for GEM), homed=1, then read back
 //   - second run (valid data): leave NV alone, read existing values
 //   - homed flag round-trip via uint8 0/1
 //   - position offsets round-trip via float
@@ -103,6 +105,10 @@ static AmpSettings settings;
 static double absoluteOffset1, absoluteOffset2;
 static bool   homed;
 
+// fake axis state - mount is at home when amp.init() runs (home.reset()
+// in Mount::begin runs first), so axes report Deg90 instrument coord on GEM.
+static double axis1InstrumentCoord, axis2InstrumentCoord;
+
 // the compile-time defaults (Config.defaults.h)
 static AmpSettings makeDefaults() {
   AmpSettings s;
@@ -117,9 +123,9 @@ static AmpSettings makeDefaults() {
 static void initAmp() {
   if (!nv.hasValidKey() || nv.isNull(NV_AMP_SETTINGS_BASE, sizeof(AmpSettings))) {
     nv.writeBytes(NV_AMP_SETTINGS_BASE, &settings, sizeof(AmpSettings));
-    nv.write(NV_AMP_POSITION_BASE,     0.0f);
-    nv.write(NV_AMP_POSITION_BASE + 4, 0.0f);
-    nv.write(NV_AMP_HOMED_BASE,        (uint8_t)0);
+    nv.write(NV_AMP_POSITION_BASE,     (float)axis1InstrumentCoord);
+    nv.write(NV_AMP_POSITION_BASE + 4, (float)axis2InstrumentCoord);
+    nv.write(NV_AMP_HOMED_BASE,        (uint8_t)1);
   }
   nv.readBytes(NV_AMP_SETTINGS_BASE, &settings, sizeof(AmpSettings));
   absoluteOffset1 = nv.readF(NV_AMP_POSITION_BASE);
@@ -132,6 +138,9 @@ void setUp(void) {
   settings = makeDefaults();
   absoluteOffset1 = absoluteOffset2 = 0.0;
   homed = false;
+  // GEM home convention: motorSteps=0, instrumentCoordinate=Deg90.
+  axis1InstrumentCoord = Deg90;
+  axis2InstrumentCoord = Deg90;
 }
 void tearDown(void) {}
 
@@ -160,18 +169,18 @@ void test_first_run_settings_null_writes_defaults() {
   TEST_ASSERT_EQUAL(1, nv.writeBytesCount);
 }
 
-void test_first_run_homed_flag_initialized_to_zero() {
+void test_first_run_homed_flag_set_true() {
   nv.valid_key = false;
   initAmp();
-  TEST_ASSERT_FALSE(homed);
-  TEST_ASSERT_EQUAL_UINT8(0, nv.readUC(NV_AMP_HOMED_BASE));
+  TEST_ASSERT_TRUE(homed);
+  TEST_ASSERT_EQUAL_UINT8(1, nv.readUC(NV_AMP_HOMED_BASE));
 }
 
-void test_first_run_position_initialized_to_zero() {
+void test_first_run_position_seeded_from_axis() {
   nv.valid_key = false;
   initAmp();
-  TEST_ASSERT_DOUBLE_WITHIN(DOUBLE_TOL, 0.0, absoluteOffset1);
-  TEST_ASSERT_DOUBLE_WITHIN(DOUBLE_TOL, 0.0, absoluteOffset2);
+  TEST_ASSERT_DOUBLE_WITHIN(FLOAT_TOL, Deg90, absoluteOffset1);
+  TEST_ASSERT_DOUBLE_WITHIN(FLOAT_TOL, Deg90, absoluteOffset2);
 }
 
 void test_first_run_settings_match_defaults() {
@@ -260,8 +269,8 @@ int main(int, char **) {
   UNITY_BEGIN();
   RUN_TEST(test_first_run_no_valid_key_writes_defaults);
   RUN_TEST(test_first_run_settings_null_writes_defaults);
-  RUN_TEST(test_first_run_homed_flag_initialized_to_zero);
-  RUN_TEST(test_first_run_position_initialized_to_zero);
+  RUN_TEST(test_first_run_homed_flag_set_true);
+  RUN_TEST(test_first_run_position_seeded_from_axis);
   RUN_TEST(test_first_run_settings_match_defaults);
   RUN_TEST(test_second_run_does_not_overwrite_settings);
   RUN_TEST(test_second_run_loads_persisted_position);
