@@ -48,6 +48,10 @@ private:
   // boot-time home.reset() (from Mount::begin) calls resetOnHome before init runs.
   // skipping it preserves persisted AMP state across reboots.
   bool initialized = false;
+
+  // altitude at the most recent horizon-trip stop; used by checkLimits() to
+  // detect when the mount is being driven further into the violation
+  double lastStopAltitude = 0.0;
 };
 
 extern AbsoluteMotorPosition amp;

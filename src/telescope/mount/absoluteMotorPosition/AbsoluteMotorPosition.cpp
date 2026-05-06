@@ -11,6 +11,13 @@
 #include "../coordinates/Transform.h"
 #include "../../../lib/axis/Axis.h"
 
+// horizon re-entry hysteresis (deg): how far below the most recent stop's
+// altitude the mount can drift before checkLimits() fires limits.stop() again.
+// small enough to keep cumulative drift bounded if the user keeps slewing into
+// the violation; large enough that minor fluctuations during recovery slews
+// don't false-trigger another stop.
+static const float HORIZON_REENTRY_HYST_DEG = 0.02F;
+
 void AbsoluteMotorPosition::init() {
   if (AmpSettingsSize < sizeof(AmpSettings)) {
     nv.initError = true;
@@ -69,6 +76,9 @@ void AbsoluteMotorPosition::applyDriftCorrection() {
 }
 
 void AbsoluteMotorPosition::checkLimits() {
+  // capture previous-poll state before reset so we can edge-trigger limits.stop()
+  bool lastErrorHorizon = errorHorizon;
+
   errorEast = false;
   errorWest = false;
   errorHorizon = false;
@@ -91,12 +101,21 @@ void AbsoluteMotorPosition::checkLimits() {
     errorWest = true;
   }
 
-  // altitude: compute from absolute motor positions via same path as existing altitude check
+  // halt fires on the rising edge of the trip, and again any time the mount
+  // drifts more than the hysteresis below the last-stopped altitude (i.e. the
+  // user is driving deeper into the violation). recovery slews where alt
+  // rises don't trigger.
   Coordinate absCoord = transform.instrumentToMount(absPos1, absPos2);
   transform.equToHor(&absCoord);
   if (absCoord.a < settings.horizonLimit) {
-    VLF("WRN: AMP, altitude below horizon limit");
-    limits.stop();
+    bool worsening = absCoord.a < lastStopAltitude - degToRadF(HORIZON_REENTRY_HYST_DEG);
+    if (!lastErrorHorizon) {
+      VLF("WRN: AMP, altitude below horizon limit");
+      lastStopAltitude = absCoord.a;
+    } else if (worsening) {
+      limits.stop();
+      lastStopAltitude = absCoord.a;
+    }
     errorHorizon = true;
   }
 }
