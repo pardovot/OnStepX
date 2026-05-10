@@ -9,8 +9,9 @@ manual re-anchor (:PASz#).
 
 Suites:
   basic    - no mount movement (settings, parsing, getters)
-  movement - slews and homing required
-  all      - both
+  movement - slews and homing required (excluding limit tests)
+  limits   - east/west/horizon limit trip + recovery tests (slow, geometry-heavy)
+  all      - everything
 
 Prereq:
   - GEM mount, stepper, no encoders (project default)
@@ -20,7 +21,8 @@ Prereq:
 Usage:
   python test/automated_amp_tests.py --port COM5                      # all (default)
   python test/automated_amp_tests.py --port COM5 --suite basic        # no movement
-  python test/automated_amp_tests.py --port COM5 --suite movement
+  python test/automated_amp_tests.py --port COM5 --suite movement     # non-limit movement
+  python test/automated_amp_tests.py --port COM5 --suite limits       # limit trip + recovery
   python test/automated_amp_tests.py --port COM5 --test set_drift_threshold
   python test/automated_amp_tests.py --port COM5 --last-failed        # rerun failures
   python test/automated_amp_tests.py --port COM5 --list-tests
@@ -85,9 +87,12 @@ class AmpTester:
             'sync_creates_drift':          ('Sync delta visible in PAGd',         self.test_sync_creates_drift,          'movement'),
             'drift_above_threshold_corrected': ('GOTO with drift > threshold -> corrected', self.test_drift_above_threshold_corrected, 'movement'),
             'drift_below_threshold_preserved': ('GOTO with drift < threshold -> kept',      self.test_drift_below_threshold_preserved, 'movement'),
-            'east_limit_stops_motor':      ('Slew east into limit: stop / re-slew blocked / recovery', self.test_east_limit_stops_motor, 'movement'),
-            'west_limit_stops_motor':      ('Slew west into limit: stop / re-slew blocked / recovery', self.test_west_limit_stops_motor, 'movement'),
-            'horizon_limit_enforced':      ('Slew south past zenith into horizon=29°: stop / re-slew blocked / recovery', self.test_horizon_limit_enforced, 'movement'),
+            'east_limit_stops_motor':      ('Slew east into limit: stop / tracking off / recovery / tracking re-enable', self.test_east_limit_stops_motor, 'limits'),
+            'west_limit_stops_motor':      ('Slew west into limit: stop / tracking off / recovery / tracking re-enable', self.test_west_limit_stops_motor, 'limits'),
+            'horizon_trip_axis2_south':    ('Horizon trip via Ms (HA=0 Dec=-30): trip + 4 probes in-limit + MS-rejected + Mn recover', self.test_horizon_trip_axis2_south, 'limits'),
+            'horizon_trip_axis1_east':     ('Horizon trip via Me: GOTO HA=-6h alt~19, slew east, recover Mw',           self.test_horizon_trip_axis1_east,  'limits'),
+            'horizon_trip_axis1_west':     ('Horizon trip via Mw: GOTO HA=+3h alt~20.7, slew west, recover Me',     self.test_horizon_trip_axis1_west,  'limits'),
+            'horizon_trip_axis2_north':    ('Horizon trip 4-dir probes (HA=-6h Dec=+63): trip Ms + 4 probes in-limit + Mn recover', self.test_horizon_trip_axis2_north, 'limits'),
             'manual_reanchor_zeros_drift': ('PASz after big sync -> PAGd ~ 0',     self.test_manual_reanchor_zeros_drift, 'movement'),
         }
 
@@ -233,10 +238,83 @@ class AmpTester:
         h, e, w, hz = r.split(',')
         return bool(int(h)), bool(int(e)), bool(int(w)), bool(int(hz))
 
+    def is_tracking(self):
+        """:GW# 2nd char: 'T' tracking, 'N' not."""
+        r = self.send(":GW#", quiet=True)
+        return len(r) >= 2 and r[1] == 'T'
+
+    def assert_te_ms_blocked(self, error_label, expect_te_blocked):
+        """At a limit: :MS# must be rejected. :Te# behavior depends on whether
+        sidereal tracking worsens the limit:
+          - expect_te_blocked=True : tracking pushes axis further past limit;
+            Limits::poll re-trips within 100ms -> is_tracking=False
+          - expect_te_blocked=False: tracking moves axis away from / parallel to
+            the limit -> tracking stays on (firmware does not gate :Te# on
+            error state)
+        Caller must already be in-limit."""
+        self.send(":Te#", wait_ms=500)
+        tracking = self.is_tracking()
+        if expect_te_blocked:
+            self.log(f":Te# re-tripped while {error_label} active (tracking worsens limit)",
+                     not tracking, f"is_tracking={tracking}")
+        else:
+            self.log(f":Te# enables tracking while {error_label} active (tracking does not worsen limit)",
+                     tracking, f"is_tracking={tracking}")
+        self.send(":Sr12:00:00#")
+        self.send(":Sd+45:00:00#")
+        rc = self.send(":MS#")
+        self.log(f":MS# rejected with {error_label} active",
+                 rc != '0', f":MS# rc='{rc}'")
+
+    def probe_direction(self, dir_char, axis_idx, expect_blocked,
+                        pulse_ms=1000, threshold=0.1, label=""):
+        """Pulse :M{dir}# for pulse_ms then :Q{dir}#. Compare PAGp[axis_idx] delta
+        to threshold. expect_blocked=True asserts delta<threshold (worsening
+        detection stopped motor); False asserts delta>threshold (motion allowed).
+        Caller should set rate (e.g. :R7#) appropriate for pulse/threshold."""
+        move_cmd = f":M{dir_char}#"
+        stop_cmd = f":Q{dir_char}#"
+        before = self.get_pagp()[axis_idx]
+        self.send(move_cmd, expect_reply=False)
+        time.sleep(pulse_ms / 1000.0)
+        self.send(stop_cmd, expect_reply=False)
+        time.sleep(0.5)
+        after = self.get_pagp()[axis_idx]
+        delta = abs(after - before)
+        ok = (delta < threshold) if expect_blocked else (delta > threshold)
+        kind = "blocked" if expect_blocked else "allowed"
+        suffix = f" ({label})" if label else ""
+        self.log(f"Probe M{dir_char.upper()} {kind} (Δ {'<' if expect_blocked else '>'} {threshold}°){suffix}",
+                 ok,
+                 f"before={before:+.2f}° after={after:+.2f}° Δ={delta:.3f}°")
+        return delta
+
     def restore_amp_defaults(self):
         self.step("Restoring AMP defaults")
         for k, v in AMP_DEFAULTS.items():
             self.send(f":PAS{k},{v}#", quiet=True)
+
+    def slew_until_horizon_clears(self, direction, axis_idx, rate_cmd=":R9#",
+                                  max_wait=30):
+        """Slew :M{direction}# at rate_cmd while polling PAGr; stop on errorHorizon
+        clear. Use when the horizon clearance window is narrow (e.g. tight
+        horizon margin near meridian) and a fixed-duration recovery would
+        overshoot from below-horizon to past-meridian-below-horizon."""
+        self.send(rate_cmd)
+        p_before = self.get_pagp()[axis_idx]
+        self.send(f":M{direction}#", expect_reply=False)
+        t0 = time.time()
+        cleared = False
+        while time.time() - t0 < max_wait:
+            time.sleep(0.2)
+            _, _, _, hz = self.get_pagr()
+            if not hz:
+                cleared = True
+                break
+        self.send(f":Q{direction}#", expect_reply=False)
+        time.sleep(0.5)
+        p_after = self.get_pagp()[axis_idx]
+        return p_before, p_after, cleared
 
     def goto_ha(self, ha_hours, dec=TEST_DEC_NORTH, label=""):
         self.step(f"GOTO HA={ha_hours:+.3f}h Dec={dec} [{label}]")
@@ -540,6 +618,9 @@ class AmpTester:
             limit = 90.0 - 30.0  # east absPos1 limit (60°)
             self.info(f"Home absPos1: {p_home:.2f}°  east limit: 30° (stops at {limit:.2f}°)")
 
+            self.send(":Te#", wait_ms=1000)
+            self.log("Tracking enabled after home", self.is_tracking(), ":GW# 2nd char")
+
             # ── 1. slew east into limit → motor stalls ───────────────────────
             self.step("Slewing east (:Me#) until stall...")
             final = self.wait_for_stall(":Me#", ":Qe#")
@@ -548,6 +629,7 @@ class AmpTester:
 
             h, e, w, hz = self.get_pagr()
             self.log("PAGr errorEast set", e, f"h={h} e={e} w={w} r={hz}")
+            self.log("Tracking off after east limit trip", not self.is_tracking())
             self.log("Motor went past east limit",
                      final < limit, f"final={final:.2f}° limit={limit:.2f}°")
             self.log(f"Overshoot within deceleration budget ({self.OVERSHOOT_BUDGET_DEG}°)",
@@ -567,11 +649,10 @@ class AmpTester:
                      drift < 2.0,
                      f"before={pos_before:.2f}° after={pos_after:.2f}° drift={drift:.2f}°")
 
-            # ── 3. :MS# rejected while error active ──────────────────────────
-            self.send(":Sr12:00:00#")
-            self.send(":Sd+45:00:00#")
-            rc = self.send(":MS#")
-            self.log("MS# rejected with errorEast active", rc != '0', f":MS# rc='{rc}'")
+            # ── 3. :Te# and :MS# while errorEast active ──────────────────────
+            # Sidereal moves axis1 forward (east limit = axis1.min) -> AWAY
+            # from limit -> tracking stays on. :MS# still rejected.
+            self.assert_te_ms_blocked("errorEast", expect_te_blocked=False)
 
             # ── 4. recovery: slew west moves motor away from limit ──────────
             self.step("Slewing west (recovery, away from east limit)...")
@@ -593,12 +674,15 @@ class AmpTester:
             if in_range:
                 self.log("errorEast clears once motor back in range",
                          not e, f"PAGr h={h} e={e} w={w} r={hz}")
+                self.send(":Te#", wait_ms=200)
+                self.log("Tracking re-enables after recovery", self.is_tracking())
             else:
                 self.warn(f"Recovery didn't clear east limit zone (final={pos_after:.2f}° vs limit={limit:.2f}°), skipping clear-check")
         finally:
             self.send(":Qe#", expect_reply=False)
             self.send(":Qw#", expect_reply=False)
             self.send(":Q#",  expect_reply=False)
+            self.send(":Td#", expect_reply=False)
             self.restore_amp_defaults()
 
     def test_west_limit_stops_motor(self):
@@ -611,6 +695,9 @@ class AmpTester:
             limit = 90.0 + 30.0  # west absPos1 limit (120°)
             self.info(f"Home absPos1: {p_home:.2f}°  west limit: 30° (stops at {limit:.2f}°)")
 
+            self.send(":Te#", wait_ms=200)
+            self.log("Tracking enabled after home", self.is_tracking(), ":GW# 2nd char")
+
             # ── 1. slew west into limit → motor stalls ───────────────────────
             self.step("Slewing west (:Mw#) until stall...")
             final = self.wait_for_stall(":Mw#", ":Qw#")
@@ -619,6 +706,7 @@ class AmpTester:
 
             h, e, w, hz = self.get_pagr()
             self.log("PAGr errorWest set", w, f"h={h} e={e} w={w} r={hz}")
+            self.log("Tracking off after west limit trip", not self.is_tracking())
             self.log("Motor went past west limit",
                      final > limit, f"final={final:.2f}° limit={limit:.2f}°")
             self.log(f"Overshoot within deceleration budget ({self.OVERSHOOT_BUDGET_DEG}°)",
@@ -638,11 +726,10 @@ class AmpTester:
                      drift < 2.0,
                      f"before={pos_before:.2f}° after={pos_after:.2f}° drift={drift:.2f}°")
 
-            # ── 3. :MS# rejected while error active ──────────────────────────
-            self.send(":Sr12:00:00#")
-            self.send(":Sd+45:00:00#")
-            rc = self.send(":MS#")
-            self.log("MS# rejected with errorWest active", rc != '0', f":MS# rc='{rc}'")
+            # ── 3. :Te# and :MS# while errorWest active ──────────────────────
+            # Sidereal moves axis1 forward (west limit = axis1.max) -> PAST
+            # limit -> Limits::poll re-trips within 100ms -> tracking off.
+            self.assert_te_ms_blocked("errorWest", expect_te_blocked=True)
 
             # ── 4. recovery: slew east moves motor away from limit ──────────
             self.step("Slewing east (recovery, away from west limit)...")
@@ -664,100 +751,333 @@ class AmpTester:
             if in_range:
                 self.log("errorWest clears once motor back in range",
                          not w, f"PAGr h={h} e={e} w={w} r={hz}")
+                self.send(":Te#", wait_ms=200)
+                self.log("Tracking re-enables after recovery", self.is_tracking())
             else:
                 self.warn(f"Recovery didn't clear west limit zone (final={pos_after:.2f}° vs limit={limit:.2f}°), skipping clear-check")
         finally:
             self.send(":Qe#", expect_reply=False)
             self.send(":Qw#", expect_reply=False)
             self.send(":Q#",  expect_reply=False)
+            self.send(":Td#", expect_reply=False)
             self.restore_amp_defaults()
 
-    # Slew the mount across the configured horizon limit and verify the
-    # full enforcement chain: motor stops via limits.stop(), errorHorizon
-    # set, re-slew blocked, :MS# rejected, recovery clears.
-    #
-    # Choosing the horizon value:
-    #   At lat=30, home alt = 30° (pole). Slewing :Ms# south takes alt up
-    #   through zenith (alt=90 at Dec=+30) and back down. Standard
-    #   LIMIT_ALT_MAX (~80°) will halt the slew at zenith unless we trip
-    #   AMP horizon BEFORE then. So horizon must be > 80° equivalent...
-    #   that's not possible - horizon range is -30..30.
-    #   Instead: pick horizon close to home alt so trip fires on descent,
-    #   AFTER zenith, at a Dec value reachable past the alt-max stop.
-    #   Setting horizon=29° trips at Dec ≈ -31° (alt=29°). The descent
-    #   from zenith re-passes alt=80 at Dec=+20, so by Dec=-31 the
-    #   alt-max condition has already cleared.
-    def test_horizon_limit_enforced(self):
-        self._banner("Slew south through horizon at lat=30, horizon=29° → errorHorizon", movement=True)
+    # Probe rate for the 4-direction blocked/allowed assertions. R7 = 48x sidereal
+    # = ~0.2°/s. Pulse 3s so axis1 motion near the meridian (small sin(HA), low
+    # alt sensitivity ~0.05°/°) has time to drop alt past worsening hyst (0.02°
+    # = 0.4° axis1 motion at HA~3°): allowed shows ~0.6° (full pulse), blocked
+    # shows ~0.45° (worsening detected ~2s in, decel adds 0.05°). Threshold 0.5°
+    # separates. Axis2 probes detect within 100ms regardless (high sensitivity).
+    PROBE_RATE_CMD = ":R7#"
+    PROBE_PULSE_MS = 3000
+    PROBE_THRESHOLD_DEG = 0.5
+
+    # ── horizon trip suite ──────────────────────────────────────────────────
+    # Pattern shared across all 4 horizon tests:
+    #   home -> Te (sets PIER=E) -> R9 -> GOTO deterministic target above
+    #   horizon -> snapshot pier via :Gm# -> arm tight horizon -> trip via R9
+    #   slew into limit -> 4-direction probes at PROBE_RATE_CMD with re-trip
+    #   between unblocked probes (so each probe runs while errorHorizon=1) ->
+    #   R9 recovery via slew_until_horizon_clears -> verify pier unchanged at
+    #   trip / after probes / at end.
+    # R7 (PROBE_RATE_CMD) is used only for probes; everything else is R9.
+
+    # Geometry: lat=30, GOTO HA=0 Dec=-30 -> alt=30 at south meridian.
+    # Trip via Ms drops dec, alt drops past horizon=29. At HA=0 the 1st-order
+    # alt-derivative wrt axis1 is zero, so Me/Mw probes don't appreciably
+    # worsen alt - they're allowed (not blocked) by the horizon limit.
+    def test_horizon_trip_axis2_south(self):
+        self._banner("Horizon trip via axis2 south (HA=0 Dec=-30 alt~30)", movement=True)
         try:
-            self.setup_site()                # default lat=30
-            self.send(":PASh,29#")
-            self.send(":R9#")
+            self.setup_site()
             self.home()
+            self.send(":Te#", wait_ms=200)
+            self.log("Tracking enabled after home", self.is_tracking())
+
+            self.send(":R9#")
+            self.goto_ha(0.0, dec="-30:00:00",
+                         label="pre-trip start (HA=0 Dec=-30 alt~30)")
+
+            pier_ref = self.send(":Gm#", quiet=True).strip()
+            self.info(f"Pier side at target: {pier_ref}")
+
+            self.send(":PASh,29#")
+            self.info("Armed horizon=29 (margin ~1)")
 
             h, e, w, hz = self.get_pagr()
-            self.log("Pre-slew: no horizon error at home",
+            self.log("Pre-slew: no horizon error",
                      not hz, f"PAGr h={h} e={e} w={w} r={hz}")
 
-            # ── 1. slew south, expect errorHorizon to trip mid-slew ──────────
-            self.step("Slewing south (:Ms#) - through zenith and toward south horizon...")
-            tripped = self.wait_for_horizon_trip(":Ms#", ":Qs#", max_wait=180)
-            self.log("Slew south tripped errorHorizon", tripped, "(timed out if false)")
+            self.step("Slewing south (:Ms#) at :R9# until horizon trip...")
+            self.send(":R9#")
+            tripped = self.wait_for_horizon_trip(":Ms#", ":Qs#", max_wait=30)
+            self.log("Slew south tripped errorHorizon", tripped)
 
             h, e, w, hz = self.get_pagr()
             self.log("PAGr errorHorizon set", hz, f"PAGr h={h} e={e} w={w} r={hz}")
+            self.log("Tracking off after horizon trip", not self.is_tracking())
+            self.log(f"Pier unchanged after trip ({pier_ref})",
+                     self.send(":Gm#", quiet=True).strip() == pier_ref)
 
-            # diagnostics - what does the firmware think the position is?
             p1, p2 = self.get_pagp()
-            dec = self.send(":GD#", quiet=True)
-            ra  = self.send(":GR#", quiet=True)
-            err_code = self.send(":GU#", quiet=True)
-            self.info(f"axis1={p1:+.2f}° axis2={p2:+.2f}° (PAGp)")
-            self.info(f"firmware Dec={dec}  RA={ra}  status={err_code}")
-            self.info(f"expected: at lat=30, alt < 29° crosses at Dec ≈ -31°")
+            self.info(f"trip pos: axis1={p1:+.2f} axis2={p2:+.2f}")
 
-            # ── 2. re-slew south blocked while errorHorizon active ──────────
-            self.step("Re-slewing south while errorHorizon active (should be blocked)...")
-            p2_before = self.get_pagp()[1]
-            self.send(":Ms#", expect_reply=False)
-            time.sleep(3.0)
-            self.send(":Qs#", expect_reply=False)
+            # At HA=0 Me/Mw barely change alt (2nd-order), so they're not
+            # blocked. Only Ms is blocked. Mn raises alt and clears the limit;
+            # re-trip via Ms before each subsequent probe.
+            probes = [
+                ('s', 1, True,  "continues south, worsens alt"),
+                ('n', 1, False, "dec north, raises alt"),
+                ('e', 0, False, "HA shift east of meridian (2nd-order, allowed)"),
+                ('w', 0, False, "HA shift west of meridian (2nd-order, allowed)"),
+            ]
+            for dir_char, axis_idx, expect_blocked, label in probes:
+                _, _, _, hz = self.get_pagr()
+                if not hz:
+                    self.step(f"  Re-tripping via :Ms# before M{dir_char.upper()} probe...")
+                    self.send(":R9#")
+                    self.wait_for_horizon_trip(":Ms#", ":Qs#", max_wait=30)
+                self.send(self.PROBE_RATE_CMD)
+                _, _, _, hz = self.get_pagr()
+                self.log(f"In horizon limit before M{dir_char.upper()} probe", hz)
+                self.probe_direction(dir_char, axis_idx, expect_blocked,
+                                     pulse_ms=self.PROBE_PULSE_MS,
+                                     threshold=self.PROBE_THRESHOLD_DEG,
+                                     label=label)
+
+            self.log(f"Pier unchanged after probes ({pier_ref})",
+                     self.send(":Gm#", quiet=True).strip() == pier_ref)
+
+            # :Te# / :MS# while errorHorizon active. At HA=0 sidereal barely
+            # moves alt (2nd-order at meridian) -> tracking stays on. Re-trip
+            # first so the checks run in-limit.
+            _, _, _, hz = self.get_pagr()
+            if not hz:
+                self.step("  Re-tripping via :Ms# before Te/MS check...")
+                self.send(":R9#")
+                self.wait_for_horizon_trip(":Ms#", ":Qs#", max_wait=30)
+            self.assert_te_ms_blocked("errorHorizon", expect_te_blocked=False)
+
+            self.step("Recovering via :Mn# at :R9# until horizon clears...")
+            p2_before, p2_after, cleared = self.slew_until_horizon_clears('n', 1, ":R9#")
+            self.log("Mn recovery cleared horizon",
+                     cleared,
+                     f"before={p2_before:+.2f} after={p2_after:+.2f} d={p2_after-p2_before:+.2f}")
+
             time.sleep(0.5)
-            p2_after = self.get_pagp()[1]
-            drift = abs(p2_after - p2_before)
-            self.log("Re-slew south blocked at horizon",
-                     drift < 2.0,
-                     f"before={p2_before:+.2f}° after={p2_after:+.2f}° drift={drift:.2f}°")
-
-            # ── 3. :MS# rejected while error active ──────────────────────────
-            self.send(":Sr12:00:00#")
-            self.send(":Sd+45:00:00#")
-            rc = self.send(":MS#")
-            self.log("MS# rejected with errorHorizon active",
-                     rc != '0', f":MS# rc='{rc}'")
-
-            # ── 4. recovery: slew north back above horizon ──────────────────
-            self.step("Slewing north (:Mn#) to recover above horizon...")
-            p2_before = self.get_pagp()[1]
-            self.send(":Mn#", expect_reply=False)
-            time.sleep(2.0)
-            self.send(":Qn#", expect_reply=False)
-            time.sleep(0.5)
-            p2_after = self.get_pagp()[1]
-            recovered = p2_after - p2_before
-            self.log("Recovery: north slew moved axis2",
-                     abs(recovered) > 5.0,
-                     f"before={p2_before:+.2f}° after={p2_after:+.2f}° Δ={recovered:+.2f}°")
-
-            # ── 5. error clears once back above horizon ─────────────────────
-            time.sleep(0.5)  # let limits poll re-evaluate
             h, e, w, hz = self.get_pagr()
-            self.log("errorHorizon clears after recovery slew",
+            self.log("errorHorizon clear at end of test",
                      not hz, f"PAGr h={h} e={e} w={w} r={hz}")
+            self.log(f"Pier unchanged at end ({pier_ref})",
+                     self.send(":Gm#", quiet=True).strip() == pier_ref)
+            self.send(":Te#", wait_ms=200)
+            self.log("Tracking re-enables", self.is_tracking())
         finally:
-            self.send(":Qs#", expect_reply=False)
-            self.send(":Qn#", expect_reply=False)
-            self.send(":Q#",  expect_reply=False)
+            for q in (":Qe#", ":Qw#", ":Qn#", ":Qs#", ":Q#", ":Td#"):
+                self.send(q, expect_reply=False)
+            self.restore_amp_defaults()
+
+    def test_horizon_trip_axis1_east(self):
+        self._banner("Horizon trip via axis1 east (HA=-3h Dec=+41:25:02)", movement=True)
+        try:
+            self.setup_site()
+            self.home()
+            self.send(":Te#", wait_ms=200)
+            self.log("Tracking enabled after home", self.is_tracking())
+
+            self.send(":R9#")
+            self.goto_ha(-3, dec="+41:25:02", label="pre-trip start (HA=-3h Dec=+41.4, alt~19.3)")
+
+            self.send(":PASh,18#")
+            self.info("Armed horizon=18 (alt margin ~1.3 at start)")
+
+            h, e, w, hz = self.get_pagr()
+            self.log("Pre-slew: no horizon error",
+                     not hz, f"PAGr h={h} e={e} w={w} r={hz}")
+
+            self.step("Slewing east at :R9# until horizon trip...")
+            self.send(":R9#")
+            tripped = self.wait_for_horizon_trip(":Me#", ":Qe#", max_wait=30)
+            self.log("Slew east tripped errorHorizon", tripped)
+
+            h, e, w, hz = self.get_pagr()
+            self.log("Trip is horizon (not east limit)",
+                     hz and not e, f"PAGr h={h} e={e} w={w} r={hz}")
+            self.log("Tracking off after horizon trip", not self.is_tracking())
+
+            p1, p2 = self.get_pagp()
+            self.info(f"trip pos: axis1={p1:+.2f} axis2={p2:+.2f}")
+
+            # Sidereal at HA<0 moves axis1 toward meridian; with the trip
+            # axis1 deeper east of meridian, tracking can drop alt below
+            # horizon again -> re-trip -> tracking off.
+            self.assert_te_ms_blocked("errorHorizon", expect_te_blocked=True)
+
+            self.step("Recovering via :Mw# at :R9# until horizon clears...")
+            p1_before, p1_after, cleared = self.slew_until_horizon_clears('w', 0, ":R9#")
+            self.log("Mw recovery cleared horizon",
+                     cleared,
+                     f"before={p1_before:+.2f} after={p1_after:+.2f} d={p1_after-p1_before:+.2f}")
+
+            time.sleep(0.5)
+            h, e, w, hz = self.get_pagr()
+            self.log("errorHorizon clear at end of test",
+                     not hz, f"PAGr h={h} e={e} w={w} r={hz}")
+            self.send(":Te#", wait_ms=200)
+            self.log("Tracking re-enables", self.is_tracking())
+        finally:
+            for q in (":Qe#", ":Qw#", ":Q#", ":Td#"):
+                self.send(q, expect_reply=False)
+            self.restore_amp_defaults()
+
+    def test_horizon_trip_axis1_west(self):
+        self._banner("Horizon trip via axis1 west (HA=+3h Dec=+38:40:40, alt~20.7)", movement=True)
+        try:
+            self.setup_site()
+            self.home()
+            self.send(":Te#", wait_ms=200)
+            self.log("Tracking enabled after home", self.is_tracking())
+
+            self.send(":R9#")
+            self.goto_ha(3, dec="+38:40:40", label="pre-trip start (HA=+3h Dec=+38.7, alt~20.7)")
+
+            self.send(":PASh,19#")
+            self.info("Armed horizon=19 (alt margin ~1.7 at start)")
+
+            h, e, w, hz = self.get_pagr()
+            self.log("Pre-slew: no horizon error",
+                     not hz, f"PAGr h={h} e={e} w={w} r={hz}")
+
+            self.step("Slewing west at :R9# until horizon trip...")
+            self.send(":R9#")
+            tripped = self.wait_for_horizon_trip(":Mw#", ":Qw#", max_wait=30)
+            self.log("Slew west tripped errorHorizon", tripped)
+
+            h, e, w, hz = self.get_pagr()
+            self.log("Trip is horizon (not west limit)",
+                     hz and not w, f"PAGr h={h} e={e} w={w} r={hz}")
+            self.log("Tracking off after horizon trip", not self.is_tracking())
+
+            p1, p2 = self.get_pagp()
+            self.info(f"trip pos: axis1={p1:+.2f} axis2={p2:+.2f}")
+
+            # Sidereal at HA>0 moves axis1 west, away from meridian; with the
+            # trip axis1 well west of meridian, tracking drops alt -> re-trip
+            # -> tracking off.
+            self.assert_te_ms_blocked("errorHorizon", expect_te_blocked=True)
+
+            self.step("Recovering via :Me# at :R9# until horizon clears...")
+            p1_before, p1_after, cleared = self.slew_until_horizon_clears('e', 0, ":R9#")
+            self.log("Me recovery cleared horizon",
+                     cleared,
+                     f"before={p1_before:+.2f} after={p1_after:+.2f} d={p1_after-p1_before:+.2f}")
+
+            time.sleep(0.5)
+            h, e, w, hz = self.get_pagr()
+            self.log("errorHorizon clear at end of test",
+                     not hz, f"PAGr h={h} e={e} w={w} r={hz}")
+            self.send(":Te#", wait_ms=200)
+            self.log("Tracking re-enables", self.is_tracking())
+        finally:
+            for q in (":Qe#", ":Qw#", ":Q#", ":Td#"):
+                self.send(q, expect_reply=False)
+            self.restore_amp_defaults()
+
+    # Geometry: lat=30, GOTO HA=-6h Dec=+63 -> alt~26.5 (cos(HA)=0 so
+    # alt=arcsin(sin(lat)*sin(dec))). Off-meridian by 6h and well clear of the
+    # pole, so pier side stays put through trip and probes (no flip).
+    # Trip via Ms (drops dec, alt drops past horizon=25). Probes test all 4
+    # directions while errorHorizon=1: Ms/Me worsen alt (expect blocked),
+    # Mn/Mw raise alt (expect motion). After each unblocked probe the limit
+    # may clear; re-trip via Ms before the next probe so every probe runs
+    # in-limit. Recovery: Mn at R9 until errorHorizon clears.
+    def test_horizon_trip_axis2_north(self):
+        self._banner("Horizon trip 4-dir probes (HA=-6h Dec=+63 alt~26.5)", movement=True)
+        try:
+            self.setup_site()
+            self.home()
+            self.send(":Te#", wait_ms=200)
+            self.log("Tracking enabled after home", self.is_tracking())
+
+            self.send(":R9#")
+            self.goto_ha(-6.0, dec="+63:00:00",
+                         label="pre-trip start (HA=-6 Dec=+63 alt~26.5)")
+
+            pier_ref = self.send(":Gm#", quiet=True).strip()
+            self.info(f"Pier side at target: {pier_ref}")
+
+            self.send(":PASh,25#")
+            self.info("Armed horizon=25 (margin ~1.5)")
+
+            h, e, w, hz = self.get_pagr()
+            self.log("Pre-slew: no horizon error",
+                     not hz, f"PAGr h={h} e={e} w={w} r={hz}")
+
+            self.step("Slewing south (:Ms#) at :R9# until horizon trip...")
+            self.send(":R9#")
+            tripped = self.wait_for_horizon_trip(":Ms#", ":Qs#", max_wait=30)
+            self.log("Slew south tripped errorHorizon", tripped)
+
+            h, e, w, hz = self.get_pagr()
+            self.log("PAGr errorHorizon set", hz, f"PAGr h={h} e={e} w={w} r={hz}")
+            self.log("Tracking off after horizon trip", not self.is_tracking())
+            self.log(f"Pier unchanged after trip ({pier_ref})",
+                     self.send(":Gm#", quiet=True).strip() == pier_ref)
+
+            p1, p2 = self.get_pagp()
+            self.info(f"trip pos: axis1={p1:+.2f} axis2={p2:+.2f}")
+
+            # Each probe runs while errorHorizon=1. Unblocked probes (Mn/Mw)
+            # may clear the limit; re-trip via Ms before the next one.
+            probes = [
+                ('s', 1, True,  "continues south, worsens alt"),
+                ('e', 0, True,  "HA more east, worsens alt at HA=-6h"),
+                ('n', 1, False, "dec north, raises alt"),
+                ('w', 0, False, "HA toward meridian, raises alt"),
+            ]
+            for dir_char, axis_idx, expect_blocked, label in probes:
+                _, _, _, hz = self.get_pagr()
+                if not hz:
+                    self.step(f"  Re-tripping via :Ms# before M{dir_char.upper()} probe...")
+                    self.send(":R9#")
+                    self.wait_for_horizon_trip(":Ms#", ":Qs#", max_wait=30)
+                self.send(self.PROBE_RATE_CMD)
+                _, _, _, hz = self.get_pagr()
+                self.log(f"In horizon limit before M{dir_char.upper()} probe", hz)
+                self.probe_direction(dir_char, axis_idx, expect_blocked,
+                                     pulse_ms=self.PROBE_PULSE_MS,
+                                     threshold=self.PROBE_THRESHOLD_DEG,
+                                     label=label)
+
+            self.log(f"Pier unchanged after probes ({pier_ref})",
+                     self.send(":Gm#", quiet=True).strip() == pier_ref)
+
+            # Sidereal at HA=-6h moves axis1 toward meridian -> alt rises ->
+            # AWAY from horizon -> tracking stays on.
+            _, _, _, hz = self.get_pagr()
+            if not hz:
+                self.step("  Re-tripping via :Ms# before Te/MS check...")
+                self.send(":R9#")
+                self.wait_for_horizon_trip(":Ms#", ":Qs#", max_wait=30)
+            self.assert_te_ms_blocked("errorHorizon", expect_te_blocked=False)
+
+            self.step("Recovering via :Mn# at :R9# until horizon clears...")
+            p2_before, p2_after, cleared = self.slew_until_horizon_clears('n', 1, ":R9#")
+            self.log("Mn recovery cleared horizon",
+                     cleared,
+                     f"before={p2_before:+.2f} after={p2_after:+.2f} d={p2_after-p2_before:+.2f}")
+
+            time.sleep(0.5)
+            h, e, w, hz = self.get_pagr()
+            self.log("errorHorizon clear at end of test",
+                     not hz, f"PAGr h={h} e={e} w={w} r={hz}")
+            self.log(f"Pier unchanged at end ({pier_ref})",
+                     self.send(":Gm#", quiet=True).strip() == pier_ref)
+            self.send(":Te#", wait_ms=200)
+            self.log("Tracking re-enables", self.is_tracking())
+        finally:
+            for q in (":Qe#", ":Qw#", ":Qn#", ":Qs#", ":Q#", ":Td#"):
+                self.send(q, expect_reply=False)
             self.restore_amp_defaults()
 
     def test_manual_reanchor_zeros_drift(self):
@@ -783,7 +1103,7 @@ class AmpTester:
 
     # ── runner ──────────────────────────────────────────────────────────────
     def run_suite(self, suite):
-        if suite not in ('basic', 'movement', 'all'):
+        if suite not in ('basic', 'movement', 'limits', 'all'):
             print(f"{Fore.RED}Unknown suite: {suite}")
             return
 
@@ -793,7 +1113,7 @@ class AmpTester:
             print(f"{Fore.YELLOW}No tests in suite '{suite}'")
             return
 
-        has_movement = any(self.available_tests[k][2] == 'movement' for k in keys)
+        has_movement = any(self.available_tests[k][2] in ('movement', 'limits') for k in keys)
         if has_movement and not self.auto_confirm:
             print(f"\n{Fore.RED}{'!'*60}")
             print(f"{Fore.RED}WARNING: tests in suite '{suite}' move the mount.")
@@ -808,7 +1128,7 @@ class AmpTester:
             print(f"{Fore.RED}Unknown test: {key}. Use --list-tests")
             return
         suite = self.available_tests[key][2]
-        if suite == 'movement' and not self.auto_confirm:
+        if suite in ('movement', 'limits') and not self.auto_confirm:
             print(f"\n{Fore.RED}WARNING: this test moves the mount.")
             if input(f"{Fore.YELLOW}Continue? (yes/no): ").strip().lower() != 'yes':
                 return
@@ -824,7 +1144,7 @@ class AmpTester:
             name = self.available_tests[k][0]
             print(f"  {Fore.CYAN}{k:36s} - {name}")
 
-        has_movement = any(self.available_tests[k][2] == 'movement' for k in keys)
+        has_movement = any(self.available_tests[k][2] in ('movement', 'limits') for k in keys)
         if has_movement and not self.auto_confirm:
             print(f"\n{Fore.RED}WARNING: some failed tests move the mount.")
             if input(f"{Fore.YELLOW}Continue? (yes/no): ").strip().lower() != 'yes':
@@ -873,7 +1193,7 @@ class AmpTester:
         by_suite = {}
         for k, (name, _, suite) in self.available_tests.items():
             by_suite.setdefault(suite, []).append((k, name))
-        for suite in ('basic', 'movement'):
+        for suite in ('basic', 'movement', 'limits'):
             print(f"\n  {Fore.YELLOW}[{suite}]")
             for k, name in by_suite.get(suite, []):
                 print(f"    {Fore.YELLOW}{k:36s} {Fore.CYAN}- {name}")
@@ -900,7 +1220,7 @@ def main():
     ap.add_argument('--port', help='Serial port (e.g. COM5)')
     ap.add_argument('--baud', type=int, default=9600)
     ap.add_argument('--timeout', type=float, default=2.0)
-    ap.add_argument('--suite', default='all', choices=('basic', 'movement', 'all'))
+    ap.add_argument('--suite', default='all', choices=('basic', 'movement', 'limits', 'all'))
     ap.add_argument('--test', help='Run a single test by key')
     ap.add_argument('--list-tests', action='store_true')
     ap.add_argument('--last-failed', action='store_true', help='Re-run tests that failed in the last run')
