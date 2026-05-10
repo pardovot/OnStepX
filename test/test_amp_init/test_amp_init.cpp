@@ -104,6 +104,7 @@ static MockNV nv;
 static AmpSettings settings;
 static double absoluteOffset1, absoluteOffset2;
 static bool   homed;
+static bool   initialized;          // set true at end of init()
 
 // fake axis state - mount is at home when amp.init() runs (home.reset()
 // in Mount::begin runs first), so axes report Deg90 instrument coord on GEM.
@@ -131,6 +132,7 @@ static void initAmp() {
   absoluteOffset1 = nv.readF(NV_AMP_POSITION_BASE);
   absoluteOffset2 = nv.readF(NV_AMP_POSITION_BASE + 4);
   homed = (nv.readUC(NV_AMP_HOMED_BASE) == 1);
+  initialized = true;
 }
 
 void setUp(void) {
@@ -138,6 +140,7 @@ void setUp(void) {
   settings = makeDefaults();
   absoluteOffset1 = absoluteOffset2 = 0.0;
   homed = false;
+  initialized = false;
   // GEM home convention: motorSteps=0, instrumentCoordinate=Deg90.
   axis1InstrumentCoord = Deg90;
   axis2InstrumentCoord = Deg90;
@@ -265,6 +268,53 @@ void test_homed_flag_garbage_treated_as_unhomed() {
   TEST_ASSERT_FALSE(homed);
 }
 
+// ── initialized flag ─────────────────────────────────────────────────────────
+
+// init() must set initialized=true at the end of either path (first-run or
+// second-run); resetOnHome reads this flag and no-ops while it's false.
+void test_init_flips_initialized_first_run() {
+  nv.valid_key = false;
+  TEST_ASSERT_FALSE(initialized);
+  initAmp();
+  TEST_ASSERT_TRUE(initialized);
+}
+
+void test_init_flips_initialized_second_run() {
+  // pre-populate NV as if a prior session had run init
+  nv.valid_key = true;
+  AmpSettings def = makeDefaults();
+  nv.writeBytes(NV_AMP_SETTINGS_BASE, &def, sizeof(AmpSettings));
+  nv.write(NV_AMP_POSITION_BASE,     (float)Deg90);
+  nv.write(NV_AMP_POSITION_BASE + 4, (float)Deg90);
+  nv.write(NV_AMP_HOMED_BASE,        (uint8_t)1);
+
+  TEST_ASSERT_FALSE(initialized);
+  initAmp();
+  TEST_ASSERT_TRUE(initialized);
+}
+
+// when valid NV exists, init must NOT write (would clobber persisted position)
+void test_second_run_no_writes() {
+  nv.valid_key = true;
+  AmpSettings def = makeDefaults();
+  nv.writeBytes(NV_AMP_SETTINGS_BASE, &def, sizeof(AmpSettings));
+  nv.write(NV_AMP_POSITION_BASE,     (float)degToRad(110.0));
+  nv.write(NV_AMP_POSITION_BASE + 4, (float)degToRad(45.0));
+  nv.write(NV_AMP_HOMED_BASE,        (uint8_t)1);
+
+  int writeBytesBefore = nv.writeBytesCount;
+  int writeFloatBefore = nv.writeFloatCount;
+  int writeUCBefore    = nv.writeUCCount;
+
+  initAmp();
+
+  TEST_ASSERT_EQUAL(writeBytesBefore, nv.writeBytesCount);
+  TEST_ASSERT_EQUAL(writeFloatBefore, nv.writeFloatCount);
+  TEST_ASSERT_EQUAL(writeUCBefore,    nv.writeUCCount);
+  TEST_ASSERT_DOUBLE_WITHIN(FLOAT_TOL, degToRad(110.0), absoluteOffset1);
+  TEST_ASSERT_DOUBLE_WITHIN(FLOAT_TOL, degToRad(45.0),  absoluteOffset2);
+}
+
 int main(int, char **) {
   UNITY_BEGIN();
   RUN_TEST(test_first_run_no_valid_key_writes_defaults);
@@ -277,5 +327,8 @@ int main(int, char **) {
   RUN_TEST(test_homed_flag_round_trip_one);
   RUN_TEST(test_homed_flag_round_trip_zero);
   RUN_TEST(test_homed_flag_garbage_treated_as_unhomed);
+  RUN_TEST(test_init_flips_initialized_first_run);
+  RUN_TEST(test_init_flips_initialized_second_run);
+  RUN_TEST(test_second_run_no_writes);
   return UNITY_END();
 }

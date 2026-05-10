@@ -186,7 +186,12 @@ CommandError Limits::validateTarget(Coordinate *coords, bool *eastReachable, boo
   return CE_NONE;
 }
 
-// true if an error exists
+// true if an error exists.
+// Soft errors (meridian, altitude, axis-limit, AMP) are reflected via the
+// aggregated error.* flags - AMP rolls into error.limit.axis1.min/max and
+// error.altitude.min inside Limits::poll. Suppressed when !limitsEnabled
+// (boot pre-first-goto, home-guide); only init/limitSense report then.
+// isGotoError() and errorCode() read AMP directly for stronger contracts.
 bool Limits::isError() {
   return initError.nv ||
          initError.value ||

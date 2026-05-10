@@ -2,21 +2,30 @@
 //
 // Production (AbsoluteMotorPosition.cpp):
 //   void checkLimits() {
+//     bool lastErrorHorizon = errorHorizon;
 //     errorEast = false; errorWest = false; errorHorizon = false;
 //     if (!homed) return;
 //     double absPos1 = getAbsoluteMotorPos1();
-//     if (absPos1 < (Deg90 - settings.eastLimit)) { stopAxis1(REVERSE); errorEast = true; }
-//     if (absPos1 > (Deg90 + settings.westLimit)) { stopAxis1(FORWARD); errorWest = true; }
+//     if (absPos1 < (Deg90 - settings.eastLimit)) { limits.stopAxis1(REVERSE); errorEast = true; }
+//     if (absPos1 > (Deg90 + settings.westLimit)) { limits.stopAxis1(FORWARD); errorWest = true; }
 //     Coordinate absCoord = transform.instrumentToMount(absPos1, absPos2);
 //     transform.equToHor(&absCoord);
-//     if (absCoord.a < settings.horizonLimit) { stop(); errorHorizon = true; }
+//     if (absCoord.a < settings.horizonLimit) {
+//       bool worsening = absCoord.a < lastStopAltitude - HORIZON_REENTRY_HYST;
+//       if (!lastErrorHorizon)        lastStopAltitude = absCoord.a;     // rising edge: no direct stop
+//       else if (worsening) { limits.stop(); lastStopAltitude = absCoord.a; }
+//       errorHorizon = true;
+//     }
 //   }
 //
-// Convention: home is at absoluteMotorPos1 == Deg90. East side is "below"
-// Deg90 (smaller absPos), west side is "above" Deg90 (larger absPos).
-// All three error flags reset at function entry, so they clear on the next
-// call when conditions return in-range. East/west/horizon checks are independent
-// `if`s, not `else-if` - both can fire simultaneously.
+// East/west: direct stopAxis1() on every cycle the flag is set; flag cleared at
+// entry. Independent `if`s, not else-if. Both can fire with horizon.
+//
+// Horizon: rising-edge stop fires via Limits::poll propagation
+// (errorHorizon -> error.altitude.min -> rising-edge stop()), NOT here.
+// checkLimits() calls limits.stop() directly only when worsening past
+// (lastStopAltitude - hysteresis), to halt user driving deeper into violation.
+// Recovery slews (alt rising while flag still set) must NOT trigger another stop.
 //
 // Horizon: real production computes altitude via transform.equToHor from
 // absoluteMotorPos. Unit test models altitude as a direct input (the transform
@@ -40,17 +49,39 @@ static bool errorEast    = false;
 static bool errorWest    = false;
 static bool errorHorizon = false;
 
+// horizon edge-trigger state (mirrors AbsoluteMotorPosition.cpp)
+static const double HORIZON_REENTRY_HYST = 0.02 * (M_PI / 180.0);  // 0.02 deg
+static double lastStopAltitude = 0.0;
+
+// production-call counters: increment when production would call limits.stop()
+// or limits.stopAxis1(). Tests assert these to verify the contract that the
+// rising horizon edge does NOT call stop() directly.
+static int stopCount      = 0;
+static int stopAxis1Count = 0;
+
 static double getAbsoluteMotorPos1() { return motorPos1 + offset1; }
 
 static void checkLimits() {
+  bool lastErrorHorizon = errorHorizon;
+
   errorEast    = false;
   errorWest    = false;
   errorHorizon = false;
   if (!homed) return;
   double absPos1 = getAbsoluteMotorPos1();
-  if (absPos1 < (Deg90 - eastLimit)) errorEast = true;
-  if (absPos1 > (Deg90 + westLimit)) errorWest = true;
-  if (altitude < horizonLimit) errorHorizon = true;
+  if (absPos1 < (Deg90 - eastLimit)) { stopAxis1Count++; errorEast = true; }
+  if (absPos1 > (Deg90 + westLimit)) { stopAxis1Count++; errorWest = true; }
+
+  if (altitude < horizonLimit) {
+    bool worsening = altitude < lastStopAltitude - HORIZON_REENTRY_HYST;
+    if (!lastErrorHorizon) {
+      lastStopAltitude = altitude;
+    } else if (worsening) {
+      stopCount++;
+      lastStopAltitude = altitude;
+    }
+    errorHorizon = true;
+  }
 }
 
 static void simulateHome() {
@@ -69,6 +100,9 @@ void setUp(void) {
   altitude = degToRad(45.0);
   homed = false;
   errorEast = errorWest = errorHorizon = false;
+  lastStopAltitude = 0.0;
+  stopCount = 0;
+  stopAxis1Count = 0;
 }
 void tearDown(void) {}
 
@@ -296,6 +330,128 @@ void test_west_and_horizon_simultaneous() {
   TEST_ASSERT_TRUE(errorHorizon);
 }
 
+// horizon rising-edge contract: lastErrorHorizon=false on entry sets
+// lastStopAltitude but does NOT call limits.stop() directly. The stop arrives
+// via Limits::poll propagation (errorHorizon -> error.altitude.min ->
+// rising-edge stop()), not modeled here - this test asserts only the contract
+// owned by checkLimits().
+void test_horizon_rising_edge_no_direct_stop() {
+  simulateHome();
+  altitude = degToRad(-15.0);
+  checkLimits();
+  TEST_ASSERT_TRUE(errorHorizon);
+  TEST_ASSERT_EQUAL_INT(0, stopCount);
+  TEST_ASSERT_DOUBLE_WITHIN(DOUBLE_TOL, degToRad(-15.0), lastStopAltitude);
+}
+
+// east/west: direct stopAxis1() on every cycle the flag is set (every poll
+// while in violation). Distinct from horizon, which only stops on edges.
+void test_east_calls_stop_axis1_every_poll() {
+  simulateHome();
+  motorPos1 = -eastLimit - degToRad(5.0);
+  checkLimits();
+  TEST_ASSERT_TRUE(errorEast);
+  TEST_ASSERT_EQUAL_INT(1, stopAxis1Count);
+  checkLimits();
+  TEST_ASSERT_EQUAL_INT(2, stopAxis1Count);
+  checkLimits();
+  TEST_ASSERT_EQUAL_INT(3, stopAxis1Count);
+}
+
+// once in violation, recovery slews where alt rises must NOT call stop() again.
+// The flag stays set until alt clears the limit; counter must remain 0.
+void test_horizon_recovery_no_extra_stop() {
+  simulateHome();
+  altitude = degToRad(-15.0);
+  checkLimits();                              // rising edge, stopCount=0
+  TEST_ASSERT_EQUAL_INT(0, stopCount);
+
+  altitude = degToRad(-13.0);                 // alt rising (recovery), still below
+  checkLimits();
+  TEST_ASSERT_TRUE(errorHorizon);
+  TEST_ASSERT_EQUAL_INT(0, stopCount);
+
+  altitude = degToRad(-11.0);                 // closer to horizon
+  checkLimits();
+  TEST_ASSERT_TRUE(errorHorizon);
+  TEST_ASSERT_EQUAL_INT(0, stopCount);
+}
+
+// alt drifting within hysteresis of the last stop (jitter) must NOT call stop().
+// HORIZON_REENTRY_HYST = 0.02 deg.
+void test_horizon_within_hysteresis_no_stop() {
+  simulateHome();
+  altitude = degToRad(-15.0);
+  checkLimits();                              // anchor lastStopAltitude = -15
+  TEST_ASSERT_EQUAL_INT(0, stopCount);
+
+  // worsen by less than hyst: -15.01 deg, still > (-15 - 0.02) = -15.02
+  altitude = degToRad(-15.01);
+  checkLimits();
+  TEST_ASSERT_TRUE(errorHorizon);
+  TEST_ASSERT_EQUAL_INT(0, stopCount);
+}
+
+// alt drops past (lastStopAltitude - hysteresis): worsening, stop() fires and
+// lastStopAltitude updates to the new (worse) altitude.
+void test_horizon_worsening_calls_stop() {
+  simulateHome();
+  altitude = degToRad(-15.0);
+  checkLimits();                              // anchor lastStopAltitude = -15
+  TEST_ASSERT_EQUAL_INT(0, stopCount);
+
+  altitude = degToRad(-15.5);                 // 0.5 deg below anchor, > 0.02 hyst
+  checkLimits();
+  TEST_ASSERT_TRUE(errorHorizon);
+  TEST_ASSERT_EQUAL_INT(1, stopCount);
+  TEST_ASSERT_DOUBLE_WITHIN(DOUBLE_TOL, degToRad(-15.5), lastStopAltitude);
+
+  altitude = degToRad(-16.0);                 // worsens further
+  checkLimits();
+  TEST_ASSERT_EQUAL_INT(2, stopCount);
+  TEST_ASSERT_DOUBLE_WITHIN(DOUBLE_TOL, degToRad(-16.0), lastStopAltitude);
+}
+
+// after clearing (alt back above horizon), errorHorizon flips false. A second
+// excursion below horizon is a fresh rising edge: lastStopAltitude resets to
+// the new altitude and stop() is NOT called again.
+void test_horizon_clear_then_retrip_is_new_rising_edge() {
+  simulateHome();
+  altitude = degToRad(-15.0);
+  checkLimits();                              // rising edge, anchor = -15
+  TEST_ASSERT_EQUAL_INT(0, stopCount);
+  TEST_ASSERT_TRUE(errorHorizon);
+
+  altitude = degToRad(45.0);                  // recover above horizon
+  checkLimits();
+  TEST_ASSERT_FALSE(errorHorizon);
+
+  altitude = degToRad(-12.0);                 // re-trip, but ABOVE old anchor (-15)
+  checkLimits();
+  TEST_ASSERT_TRUE(errorHorizon);
+  TEST_ASSERT_EQUAL_INT(0, stopCount);        // fresh rising edge, no stop
+  TEST_ASSERT_DOUBLE_WITHIN(DOUBLE_TOL, degToRad(-12.0), lastStopAltitude);
+}
+
+// across many random polls under sustained violation, stop() may fire (on each
+// worsening past hyst) but stopCount must always be < pollCount - i.e.
+// in-violation polls do NOT each generate a stop call.
+void test_property_horizon_polls_dont_each_stop() {
+  srand(4);
+  simulateHome();
+  altitude = degToRad(-15.0);
+  checkLimits();                              // anchor
+
+  int polls = 100;
+  for (int i = 0; i < polls; i++) {
+    // random walk within +-0.5 deg of anchor (sometimes worsening, sometimes recovering)
+    altitude = degToRad(-15.0) + degToRad(randomFloat(-0.5f, 0.5f));
+    checkLimits();
+    TEST_ASSERT_TRUE(errorHorizon || altitude >= horizonLimit);
+  }
+  TEST_ASSERT_TRUE_MESSAGE(stopCount < polls, "stop() must not fire on every poll");
+}
+
 int main(int, char **) {
   UNITY_BEGIN();
   RUN_TEST(test_not_homed_no_errors);
@@ -319,5 +475,12 @@ int main(int, char **) {
   RUN_TEST(test_horizon_blocked_when_not_homed);
   RUN_TEST(test_east_and_horizon_simultaneous);
   RUN_TEST(test_west_and_horizon_simultaneous);
+  RUN_TEST(test_horizon_rising_edge_no_direct_stop);
+  RUN_TEST(test_east_calls_stop_axis1_every_poll);
+  RUN_TEST(test_horizon_recovery_no_extra_stop);
+  RUN_TEST(test_horizon_within_hysteresis_no_stop);
+  RUN_TEST(test_horizon_worsening_calls_stop);
+  RUN_TEST(test_horizon_clear_then_retrip_is_new_rising_edge);
+  RUN_TEST(test_property_horizon_polls_dont_each_stop);
   return UNITY_END();
 }
