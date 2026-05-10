@@ -137,6 +137,13 @@
 #define MOUNT_COORDS_MEMORY            ON //    OFF, ON Remembers approximate mount coordinates across power cycles.          Option
                                           //         Requires FRAM NV memory and the mount must not move while powered down.
 
+#define ABSOLUTE_MOTOR_POSITION        ON //    OFF, ON Enables absolute motor position safety system.                        Option
+                                          //         Requires FRAM NV memory.
+#define AMP_DRIFT_THRESHOLD_DEG      15.0 //   15.0, Drift correction threshold in degrees.                                  Option
+#define AMP_RA_EAST_LIMIT_DEG       100.0 //   100.0, RA east limit in degrees from home.                                     Option
+#define AMP_RA_WEST_LIMIT_DEG       100.0 //   100.0, RA west limit in degrees from home.                                     Option
+#define AMP_HORIZON_LIMIT_DEG      -10.0 //  -10.0, Altitude minimum limit in degrees.                                      Option
+
 #define MOUNT_ENABLE_IN_STANDBY        ON //    OFF, ON Enables mount motor drivers while in standby.                         Infreq
 
 // TIME AND LOCATION ---------------------------------------------- see https://onstep.groups.io/g/main/wiki/Configuration_Mount#TLS
