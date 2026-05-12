@@ -658,7 +658,7 @@ class AmpTester:
             self.step("Slewing west (recovery, away from east limit)...")
             pos_before = self.get_pagp()[0]
             self.send(":Mw#", expect_reply=False)
-            time.sleep(1.0)
+            time.sleep(5.0)
             self.send(":Qw#", expect_reply=False)
             time.sleep(0.5)
             pos_after = self.get_pagp()[0]
@@ -735,7 +735,7 @@ class AmpTester:
             self.step("Slewing east (recovery, away from west limit)...")
             pos_before = self.get_pagp()[0]
             self.send(":Me#", expect_reply=False)
-            time.sleep(1.0)
+            time.sleep(5.0)
             self.send(":Qe#", expect_reply=False)
             time.sleep(0.5)
             pos_after = self.get_pagp()[0]
