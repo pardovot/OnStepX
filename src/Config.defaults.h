@@ -614,10 +614,10 @@
 #define AMP_DRIFT_THRESHOLD_DEG       15.0                        // drift correction threshold in degrees
 #endif
 #ifndef AMP_RA_EAST_LIMIT_DEG
-#define AMP_RA_EAST_LIMIT_DEG         95.0                        // RA east limit, degrees from home
+#define AMP_RA_EAST_LIMIT_DEG         100.0                       // RA east limit, degrees from home
 #endif
 #ifndef AMP_RA_WEST_LIMIT_DEG
-#define AMP_RA_WEST_LIMIT_DEG         95.0                        // RA west limit, degrees from home
+#define AMP_RA_WEST_LIMIT_DEG         100.0                       // RA west limit, degrees from home
 #endif
 #ifndef AMP_HORIZON_LIMIT_DEG
 #define AMP_HORIZON_LIMIT_DEG         -10.0                       // altitude minimum limit in degrees
