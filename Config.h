@@ -13,6 +13,22 @@
 //      Parameter Name              Value   Default  Notes                                                                      Hint
 
 // =================================================================================================================================
+// MOUNT MODEL =====================================================================================================================
+
+// platformio.ini passes -DMOUNT_MODEL per env, this is the Arduino IDE fallback.
+// Settings that differ between the mounts carry an #if right where they are set.
+#ifndef MOUNT_MODEL
+#define MOUNT_MODEL                 UMI17 //  UMI17, UMI17 or SA17M. See ~/src/Constants.h                                   <-Req'd
+#endif
+
+// UMi17 gives AUX2 to the shared TMC2209 UART RX, so ESP8266 RST and GPIO0 move to the unused ST4 port.
+// SA-17M uses the pinmap defaults.
+#if MOUNT_MODEL == UMI17
+#define ADDON_GPIO0_PIN                32 //     26, ESP8266 GPIO0 (Dir2)                                                     Option
+#define ADDON_RESET_PIN                33 //   AUX2, ESP8266 RST                                                              Option
+#endif
+
+// =================================================================================================================================
 // CONTROLLER ======================================================================================================================
 
 // PINMAP ------------------------------------------------- see https://onstep.groups.io/g/main/wiki/Configuration_Controller#PINMAP
@@ -22,7 +38,11 @@
 // SERIAL PORT COMMAND CHANNELS --------------------- see https://onstep.groups.io/g/main/wiki/Configuration_Controller#SERIAL_PORTS
 #define SERIAL_A_BAUD_DEFAULT        9600 //   9600, n. Where n=9600,19200,57600,115200,230400,460800 (common baud rates.)    Infreq
 #define SERIAL_B_BAUD_DEFAULT        9600 //   9600, n. Baud rate as above. See (src/pinmaps/) for Serial port assignments.   Infreq
+#if MOUNT_MODEL == UMI17
 #define SERIAL_B_ESP_FLASHING          ON //    OFF, ON Upload ESP8266 WiFi firmware through SERIAL_B with :ESPFLASH# cmd.    Option
+#else                                     //         SA-17M
+#define SERIAL_B_ESP_FLASHING         OFF
+#endif
 #define SERIAL_C_BAUD_DEFAULT         OFF //    OFF, n. Baud rate as above. See (src/pinmaps/) for Serial port assignments.   Infreq
 #define SERIAL_D_BAUD_DEFAULT         OFF //    OFF, n. Baud rate as above. See (src/pinmaps/) for Serial port assignments.   Infreq
 #define SERIAL_E_BAUD_DEFAULT         OFF //    OFF, n. Baud rate as above. See (src/pinmaps/) for Serial port assignments.   Infreq
@@ -59,7 +79,11 @@
 
 // If runtime axis settings are enabled changes in the section below will be ignored (disable in SWS or by wiping NV/EEPROM):
 // \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ 
+#if MOUNT_MODEL == UMI17
 #define AXIS1_STEPS_PER_DEGREE   17777.77778 //  12800, n. Number of steps per degree:                                          <-Req'd
+#else                                     //         SA-17M
+#define AXIS1_STEPS_PER_DEGREE    14222.2222
+#endif
                                           //         n = (stepper_steps * micro_steps * overall_gear_reduction)/360.0
 #define AXIS1_REVERSE                  ON //    OFF, ON Reverses movement direction, or reverse wiring instead to correct.   <-Often
 #define AXIS1_LIMIT_MIN              -180 //   -180, n. Where n= -90..-360 (degrees.) Minimum "Hour Angle" or Azimuth.        Adjust
@@ -94,9 +118,17 @@
 
 // If runtime axis settings are enabled changes in the section below will be ignored (disable in SWS or by wiping NV/EEPROM):
 // \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/ \/
+#if MOUNT_MODEL == UMI17
 #define AXIS2_STEPS_PER_DEGREE   17777.77778 //  12800, n. Number of steps per degree:                                          <-Req'd
+#else                                     //         SA-17M
+#define AXIS2_STEPS_PER_DEGREE    14222.2222
+#endif
                                           //         n = (stepper_steps * micro_steps * overall_gear_reduction)/360.0
+#if MOUNT_MODEL == UMI17
 #define AXIS2_REVERSE                 OFF //    OFF, ON Reverses movement direction, or reverse wiring instead to correct.   <-Often
+#else                                     //         SA-17M
+#define AXIS2_REVERSE                  ON
+#endif
 #define AXIS2_LIMIT_MIN               -90 //    -90, n. Where n=-90..0 (degrees.) Minimum allowed Declination or Altitude.    Infreq
 #define AXIS2_LIMIT_MAX                90 //     90, n. Where n=0..90 (degrees.) Maximum allowed Declination or Altitude.     Infreq
 
@@ -183,7 +215,11 @@
 #define PARK_STRICT                   OFF //    OFF, ON Un-parking is only allowed if successfully parked.                    Option
 
 // PEC ------------------------------------------------------------ see https://onstep.groups.io/g/main/wiki/Configuration_Mount#PEC
+#if MOUNT_MODEL == UMI17
 #define PEC_STEPS_PER_WORM_ROTATION 64000 //      0, n. Steps per worm rotation (0 disables else 720 sec buffer allocated.)  <-Req'd
+#else                                     //         SA-17M
+#define PEC_STEPS_PER_WORM_ROTATION 51200
+#endif
                                           //         n = (AXIS1_STEPS_PER_DEGREE*360)/reduction_final_stage
 
 #define PEC_SENSE                     OFF //    OFF, HIGH. Senses the PEC signal rising edge or use LOW for falling edge.     Option
@@ -199,7 +235,11 @@
 #define TRACK_COMPENSATION_MEMORY     OFF //    OFF, ON Remembers refraction/pointing model compensated tracking settings.    Option
 
 // SLEWING BEHAVIOUR ------------------------------------------ see https://onstep.groups.io/g/main/wiki/Configuration_Mount#SLEWING
+#if MOUNT_MODEL == UMI17
 #define SLEW_RATE_BASE_DESIRED        1.5 //    1.0, n. Desired slew rate in deg/sec. Adjustable at run-time from            <-Req'd
+#else                                     //         SA-17M
+#define SLEW_RATE_BASE_DESIRED       1.75
+#endif
                                           //         1/2 to 2x this rate, and as performace considerations require.
 #define SLEW_RATE_MEMORY               ON //    OFF, ON Remembers rates set across power cycles.                              Option
 #define SLEW_ACCELERATION_DIST        5.0 //    5.0, n, (degrees.) Approx. distance for acceleration (and deceleration.)      Adjust

@@ -42,9 +42,11 @@
 #ifndef ONE_WIRE_PIN
   #define ONE_WIRE_PIN          AUX8_PIN         // Default Pin for OneWire bus
 #endif
-#define ADDON_GPIO0_PIN         32               // ESP8266 GPIO0 (Dir2) - custom pin, riding on unused ST4 port
+#ifndef ADDON_GPIO0_PIN
+  #define ADDON_GPIO0_PIN       26               // ESP8266 GPIO0 (Dir2)
+#endif
 #ifndef ADDON_RESET_PIN
-  #define ADDON_RESET_PIN       33               // ESP8266 RST - custom pin, riding on unused ST4 port
+  #define ADDON_RESET_PIN       AUX2_PIN         // ESP8266 RST
 #endif
 
 // The PEC index sense is a logic level input, resets the PEC index on rising edge then waits for 60 seconds before allowing another reset

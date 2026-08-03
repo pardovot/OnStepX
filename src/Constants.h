@@ -72,6 +72,12 @@
 #define ALTAZM_UNL                  9      // ALTAZM, w/unlimited Azmiuth motion
 #define MOUNT_TYPE_LAST             9
 
+// MOUNT MODEL, selects the per-mount hardware values in Config.h
+#define MOUNT_MODEL_FIRST           1
+#define UMI17                       1      // UMi17
+#define SA17M                       2      // Scorpio Astro SA-17M
+#define MOUNT_MODEL_LAST            2
+
 // MOUNT COORDS
 #define MOUNT_COORDS_FIRST          1
 #define OBSERVED_PLACE              1
