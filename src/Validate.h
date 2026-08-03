@@ -340,6 +340,19 @@
   #error "Configuration (Config.h): Setting ABSOLUTE_MOTOR_POSITION requires a NV storage device with very high write endurance (FRAM)"
 #endif
 
+// AMP settings are floats so #if cannot range check them, static_assert can.
+// Ranges match the :PAS* runtime setters in AbsoluteMotorPosition.command.cpp
+#if ABSOLUTE_MOTOR_POSITION == ON
+  static_assert(AMP_DRIFT_THRESHOLD_DEG >= 1.0 && AMP_DRIFT_THRESHOLD_DEG <= 90.0,
+    "Configuration (Config.h): Setting AMP_DRIFT_THRESHOLD_DEG out of range, use 1.0 to 90.0 (degrees)");
+  static_assert(AMP_RA_EAST_LIMIT_DEG >= 1.0 && AMP_RA_EAST_LIMIT_DEG <= 180.0,
+    "Configuration (Config.h): Setting AMP_RA_EAST_LIMIT_DEG out of range, use 1.0 to 180.0 (degrees)");
+  static_assert(AMP_RA_WEST_LIMIT_DEG >= 1.0 && AMP_RA_WEST_LIMIT_DEG <= 180.0,
+    "Configuration (Config.h): Setting AMP_RA_WEST_LIMIT_DEG out of range, use 1.0 to 180.0 (degrees)");
+  static_assert(AMP_HORIZON_LIMIT_DEG >= -30.0 && AMP_HORIZON_LIMIT_DEG <= 30.0,
+    "Configuration (Config.h): Setting AMP_HORIZON_LIMIT_DEG out of range, use -30.0 to 30.0 (degrees)");
+#endif
+
 #if MOUNT_ENABLE_IN_STANDBY != ON && MOUNT_ENABLE_IN_STANDBY != OFF
   #error "Configuration (Config.h): Setting MOUNT_ENABLE_IN_STANDBY unknown, use ON or OFF"
 #endif

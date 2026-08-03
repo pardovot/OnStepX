@@ -31,8 +31,8 @@ const float HORIZON_MAX_DEG      =  30.0f;
 
 // compile-time defaults (from Config.defaults.h)
 const float DRIFT_THRESH_DEFAULT_DEG = 15.0f;
-const float EAST_LIMIT_DEFAULT_DEG   = 95.0f;
-const float WEST_LIMIT_DEFAULT_DEG   = 95.0f;
+const float EAST_LIMIT_DEFAULT_DEG   = 100.0f;
+const float WEST_LIMIT_DEFAULT_DEG   = 100.0f;
 const float HORIZON_DEFAULT_DEG      = -10.0f;
 
 const double DEG_TO_RAD = M_PI / 180.0;

@@ -142,7 +142,7 @@
 #define AMP_DRIFT_THRESHOLD_DEG      15.0 //   15.0, Drift correction threshold in degrees.                                  Option
 #define AMP_RA_EAST_LIMIT_DEG       100.0 //   100.0, RA east limit in degrees from home.                                     Option
 #define AMP_RA_WEST_LIMIT_DEG       100.0 //   100.0, RA west limit in degrees from home.                                     Option
-#define AMP_HORIZON_LIMIT_DEG      -10.0 //  -10.0, Altitude minimum limit in degrees.                                      Option
+#define AMP_HORIZON_LIMIT_DEG       -10.0 //  -10.0, Altitude minimum limit in degrees.                                      Option
 
 #define MOUNT_ENABLE_IN_STANDBY        ON //    OFF, ON Enables mount motor drivers while in standby.                         Infreq
 
