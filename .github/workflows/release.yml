@@ -1,0 +1,153 @@
+name: Release
+
+# Tag push builds both mounts and drafts a release. Manual runs build and upload
+# workflow artifacts only, so the pipeline can be tested without cutting a release.
+on:
+  push:
+    tags: [ 'V*' ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            ~/.cache/pip
+          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+          restore-keys: pio-${{ runner.os }}-
+
+      - name: Install tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install platformio 'esptool==5.2.0'
+
+      - name: Unit tests
+        run: pio test -e native
+
+      - name: Build both mounts
+        run: pio run
+
+      - name: Check build output
+        run: |
+          set -euo pipefail
+          for e in umi17 sa17m; do
+            test -s ".pio/build/$e/firmware.bin"      || { echo "missing firmware.bin for $e";      exit 1; }
+            test -s ".pio/build/$e/flash_images.txt"  || { echo "missing flash_images.txt for $e";  exit 1; }
+          done
+          # identical images mean -DMOUNT_MODEL never reached the compiler and both
+          # binaries are the Config.h default, which would ship UMi17 values to SA-17M
+          if cmp -s .pio/build/umi17/firmware.bin .pio/build/sa17m/firmware.bin; then
+            echo "ERROR: umi17 and sa17m firmware are identical, MOUNT_MODEL is not being applied"
+            exit 1
+          fi
+
+      - name: Package flashable images
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="dev-${GITHUB_SHA::7}"
+          else
+            VERSION="${GITHUB_REF_NAME}"
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+          mkdir -p dist
+          for pair in "umi17:UMi17" "sa17m:SA-17M"; do
+            env="${pair%%:*}"; name="${pair##*:}"
+            images=".pio/build/$env/flash_images.txt"
+
+            # offsets and paths come from the build itself, so the merged image can
+            # never disagree with the bootloader the firmware was linked against
+            args=()
+            while read -r offset path; do
+              [ -f "$path" ] || { echo "image listed in $images not found: $path"; exit 1; }
+              args+=("$offset" "$path")
+            done < "$images"
+            [ ${#args[@]} -ge 8 ] || { echo "expected 4 images in $images"; exit 1; }
+
+            python -m esptool --chip esp32 merge-bin \
+              -o "dist/OnStepX-${VERSION}-${name}.bin" \
+              --flash-mode qio --flash-freq 80m --flash-size 4MB \
+              "${args[@]}"
+
+            pdir="parts-$name"
+            mkdir -p "$pdir"
+            {
+              echo "OnStepX ${VERSION} - ${name}"
+              echo "ESP32, QIO, 80MHz, 4MB"
+              echo
+            } > "$pdir/offsets.txt"
+            while read -r offset path; do
+              cp "$path" "$pdir/$(basename "$path")"
+              printf '%-9s %s\n' "$offset" "$(basename "$path")" >> "$pdir/offsets.txt"
+            done < "$images"
+            {
+              echo
+              echo "Simpler: flash OnStepX-${VERSION}-${name}.bin at 0x0 instead of these."
+            } >> "$pdir/offsets.txt"
+
+            (cd "$pdir" && zip -qr "../dist/OnStepX-${VERSION}-parts-${name}.zip" .)
+            rm -rf "$pdir"
+          done
+
+          (cd dist && sha256sum -- *.bin *.zip > SHA256SUMS.txt)
+          ls -l dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware-${{ env.VERSION }}
+          path: dist/
+
+      # Draft, so the binaries are attached but nothing is announced until the
+      # release notes are written and the draft is published by hand.
+      - name: Draft GitHub release
+        if: startsWith(github.ref, 'refs/tags/V')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --title "$GITHUB_REF_NAME" \
+            --draft \
+            --notes "Draft. Binaries built from ${GITHUB_SHA}."
+
+      - name: Publish binaries to gh-pages
+        if: startsWith(github.ref, 'refs/tags/V')
+        run: |
+          set -euo pipefail
+          rm -rf pages && mkdir pages && cd pages
+          git init -q
+          git remote add origin "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git"
+          if git fetch -q --depth 1 origin gh-pages 2>/dev/null; then
+            git checkout -q FETCH_HEAD
+            git checkout -q -B gh-pages
+          else
+            git checkout -q -b gh-pages
+          fi
+
+          mkdir -p "firmware/${GITHUB_REF_NAME}" firmware/latest
+          cp ../dist/*.bin "firmware/${GITHUB_REF_NAME}/"
+          # manifests point at firmware/latest with fixed names, so they never
+          # need editing when a new version ships
+          cp "../dist/OnStepX-${GITHUB_REF_NAME}-UMi17.bin"  firmware/latest/UMi17.bin
+          cp "../dist/OnStepX-${GITHUB_REF_NAME}-SA-17M.bin" firmware/latest/SA-17M.bin
+
+          git add -A
+          git -c user.name='github-actions[bot]' \
+              -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+              commit -q -m "Firmware ${GITHUB_REF_NAME}"
+          git push -q origin gh-pages

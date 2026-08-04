@@ -30,6 +30,9 @@ lib_deps_external/
 .pioenvs_backup/
 OnStepX.ino.cpp
 
+# Release packaging output
+dist/
+
 .kiro/
 
 # Tests
