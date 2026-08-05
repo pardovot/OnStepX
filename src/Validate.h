@@ -292,6 +292,12 @@
   #error "Configuration (Config.h): Setting MOUNT_TYPE unknown, use a valid MOUNT TYPE (from Constants.h)"
 #endif
 
+// an unknown name here expands to 0 in #if, which would otherwise fall through
+// to the #else side of every per mount setting and silently build SA-17M
+#if MOUNT_MODEL < MOUNT_MODEL_FIRST || MOUNT_MODEL > MOUNT_MODEL_LAST
+  #error "Configuration (Config.h): Setting MOUNT_MODEL unknown, use UMI17 or SA17M (from Constants.h)"
+#endif
+
 #if AXIS2_TANGENT_ARM != ON && AXIS2_TANGENT_ARM != OFF
   #error "Configuration (Config.h): Setting AXIS2_TANGENT_ARM unknown, use OFF or ON."
 #endif
