@@ -33,6 +33,11 @@ OnStepX.ino.cpp
 # Release packaging output
 dist/
 
+# *.json above is a blanket ignore, but vendored library manifests and the
+# flashing site's manifests have to be tracked or a clean checkout is incomplete
+!lib/**/*.json
+!pages/*.json
+
 .kiro/
 
 # Tests
