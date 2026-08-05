@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OnStepX Firmware - UMi17 and SA-17M</title>
+<script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js"></script>
+<style>
+  :root {
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ink: #1b1f24;
+    --muted: #5b6570;
+    --line: #d8dee4;
+    --warn-bg: #fff8e6;
+    --warn-line: #e6c34a;
+    --umi: #2f6f4e;
+    --sa: #2c4f86;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14171a;
+      --card: #1c2126;
+      --ink: #e8eaed;
+      --muted: #9aa4b0;
+      --line: #2e353d;
+      --warn-bg: #2a2413;
+      --warn-line: #7a6520;
+      --umi: #63b98c;
+      --sa: #6f9ede;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 2rem 1rem 4rem;
+    background: var(--bg); color: var(--ink);
+    font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; }
+  header { margin-bottom: 2rem; }
+  h1 { font-size: 1.75rem; margin: 0 0 .35rem; letter-spacing: -.01em; }
+  .sub { color: var(--muted); margin: 0; }
+  h2 { font-size: 1.05rem; margin: 2.25rem 0 .75rem; }
+
+  .note {
+    border: 1px solid var(--line); border-left-width: 4px;
+    background: var(--card); border-radius: 6px;
+    padding: .85rem 1rem; margin: 1rem 0;
+  }
+  .note.warn { background: var(--warn-bg); border-color: var(--warn-line); }
+  .note p { margin: .4rem 0; }
+  .note p:first-child { margin-top: 0; }
+  .note p:last-child { margin-bottom: 0; }
+  .note strong { font-weight: 650; }
+
+  .mounts { display: grid; gap: 1rem; grid-template-columns: 1fr 1fr; }
+  @media (max-width: 640px) { .mounts { grid-template-columns: 1fr; } }
+
+  .mount {
+    background: var(--card); border: 1px solid var(--line);
+    border-top: 4px solid var(--accent); border-radius: 8px;
+    padding: 1.25rem; text-align: center;
+  }
+  .mount.umi { --accent: var(--umi); }
+  .mount.sa  { --accent: var(--sa); }
+  .mount h3 { margin: 0 0 .2rem; font-size: 1.3rem; color: var(--accent); }
+  .mount .model { color: var(--muted); font-size: .85rem; margin: 0 0 1rem; }
+
+  button.install {
+    font: inherit; font-weight: 600; cursor: pointer;
+    background: var(--accent); color: #fff; border: 0;
+    border-radius: 6px; padding: .7rem 1.4rem; width: 100%;
+  }
+  button.install:hover { filter: brightness(1.08); }
+  .slot-msg { display: block; color: var(--muted); font-size: .88rem; }
+
+  ol, ul { padding-left: 1.25rem; }
+  li { margin: .3rem 0; }
+  code {
+    background: var(--bg); border: 1px solid var(--line);
+    border-radius: 4px; padding: .1rem .35rem; font-size: .9em;
+  }
+  a { color: inherit; }
+  footer { margin-top: 3rem; color: var(--muted); font-size: .88rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>OnStepX Firmware</h1>
+    <p class="sub">Browser flashing for the UMi17 and SA-17M mounts. No software to install.</p>
+  </header>
+
+  <div class="note warn" id="browser-check" hidden>
+    <p><strong>This browser cannot flash.</strong> Web Serial is only available in
+    desktop Chrome, Edge and Opera. Use one of those, or follow
+    <a href="#manual">manual flashing</a> below.</p>
+  </div>
+
+  <div class="note warn">
+    <p><strong>Home the mount before you flash.</strong> After the update the
+    firmware treats the absolute motor position as being at the home position. If
+    the telescope is somewhere else when it first powers up, the east, west and
+    horizon limits are measured from the wrong origin. Park or home the mount
+    first, or re-home it immediately afterwards.</p>
+    <p><strong>Upgrading from V2 clears all settings.</strong> Site location,
+    limits, park and home positions, PEC data, the pointing model and any saved
+    catalog objects are reset to defaults and must be set up again.</p>
+  </div>
+
+  <h2>Choose your mount</h2>
+
+  <div class="mounts">
+    <div class="mount umi">
+      <h3>UMi17</h3>
+      <p class="model">17777.8 steps/deg</p>
+      <esp-web-install-button manifest="manifest-umi17.json">
+        <button class="install" slot="activate">Install UMi17</button>
+        <span class="slot-msg" slot="unsupported">Not supported in this browser</span>
+        <span class="slot-msg" slot="not-allowed">Must be served over HTTPS</span>
+      </esp-web-install-button>
+    </div>
+
+    <div class="mount sa">
+      <h3>SA-17M</h3>
+      <p class="model">14222.2 steps/deg</p>
+      <esp-web-install-button manifest="manifest-sa17m.json">
+        <button class="install" slot="activate">Install SA-17M</button>
+        <span class="slot-msg" slot="unsupported">Not supported in this browser</span>
+        <span class="slot-msg" slot="not-allowed">Must be served over HTTPS</span>
+      </esp-web-install-button>
+    </div>
+  </div>
+
+  <div class="note">
+    <p>The two builds are not interchangeable. They differ in steps per degree,
+    declination direction and worm rotation, so flashing the wrong one gives a
+    mount that tracks and slews incorrectly rather than one that obviously fails.
+    Check which mount you have before clicking.</p>
+  </div>
+
+  <h2>Flashing</h2>
+  <ol>
+    <li>Connect the controller to the computer with a USB cable.</li>
+    <li>Click the button for your mount.</li>
+    <li>Pick the controller's serial port in the browser prompt.</li>
+    <li>Wait for erase, write and verify to finish, about a minute.</li>
+  </ol>
+  <p>If no port appears, the USB serial driver is probably missing. These boards
+  use a CP2102 or CH340 chip, both have drivers available from their vendors.</p>
+
+  <h2 id="manual">Manual flashing</h2>
+  <p>For Firefox, Safari, or any machine where browser flashing is not an option,
+  download the firmware for your mount from the
+  <a href="https://github.com/pardovot/OnStepX/releases">releases page</a> and write
+  it with Espressif's Flash Download Tool:</p>
+  <ul>
+    <li>Chip: <code>ESP32</code></li>
+    <li>Single file <code>OnStepX-&lt;version&gt;-&lt;mount&gt;.bin</code> at address <code>0x0</code></li>
+    <li>SPI settings: <code>QIO</code>, <code>80MHz</code>, <code>4MB</code></li>
+  </ul>
+  <p>The <code>parts</code> archive on the release contains the separate
+  bootloader, partition table, boot_app0 and firmware images with their offsets,
+  for tools that expect the conventional four file layout.</p>
+
+  <footer>
+    <p>Built from <a href="https://github.com/pardovot/OnStepX">pardovot/OnStepX</a>.
+    Each release is compiled from a tagged commit, and both mount images come from
+    the same build.</p>
+  </footer>
+
+</div>
+
+<script>
+  if (!('serial' in navigator)) {
+    document.getElementById('browser-check').hidden = false;
+  }
+</script>
+</body>
+</html>

@@ -125,11 +125,14 @@ jobs:
             --draft \
             --notes "Draft. Binaries built from ${GITHUB_SHA}."
 
-      - name: Publish binaries to gh-pages
+      - name: Publish site and binaries to gh-pages
         if: startsWith(github.ref, 'refs/tags/V')
         run: |
           set -euo pipefail
-          rm -rf pages && mkdir pages && cd pages
+          SITE="$PWD/pages"
+          DIST="$PWD/dist"
+
+          rm -rf _ghpages && mkdir _ghpages && cd _ghpages
           git init -q
           git remote add origin "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git"
           if git fetch -q --depth 1 origin gh-pages 2>/dev/null; then
@@ -139,15 +142,23 @@ jobs:
             git checkout -q -b gh-pages
           fi
 
+          # site source lives in pages/ on the release branch and is republished
+          # every tag, the manifests get the version stamped in on the way out
+          cp "$SITE/index.html" .
+          for m in "$SITE"/manifest-*.json; do
+            sed "s/__VERSION__/${GITHUB_REF_NAME}/" "$m" > "$(basename "$m")"
+          done
+          touch .nojekyll
+
+          # manifests always point at firmware/latest, so they never need editing
+          # when a new version ships, while the versioned copy stays for history
           mkdir -p "firmware/${GITHUB_REF_NAME}" firmware/latest
-          cp ../dist/*.bin "firmware/${GITHUB_REF_NAME}/"
-          # manifests point at firmware/latest with fixed names, so they never
-          # need editing when a new version ships
-          cp "../dist/OnStepX-${GITHUB_REF_NAME}-UMi17.bin"  firmware/latest/UMi17.bin
-          cp "../dist/OnStepX-${GITHUB_REF_NAME}-SA-17M.bin" firmware/latest/SA-17M.bin
+          cp "$DIST"/*.bin "firmware/${GITHUB_REF_NAME}/"
+          cp "$DIST/OnStepX-${GITHUB_REF_NAME}-UMi17.bin"  firmware/latest/UMi17.bin
+          cp "$DIST/OnStepX-${GITHUB_REF_NAME}-SA-17M.bin" firmware/latest/SA-17M.bin
 
           git add -A
           git -c user.name='github-actions[bot]' \
               -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
-              commit -q -m "Firmware ${GITHUB_REF_NAME}"
+              commit -q -m "Site and firmware ${GITHUB_REF_NAME}"
           git push -q origin gh-pages
