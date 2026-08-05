@@ -1,7 +1,8 @@
 # Writes flash_images.txt next to firmware.bin listing every image the upload
-# would write, as "<offset> <path>" lines. The release workflow feeds these to
-# esptool merge-bin, so the merged image always matches what this build links
-# against instead of a bootloader guessed from the packages directory.
+# would write, as "<offset> <path>" lines, and flash_params.txt with the mode,
+# frequency and size. The release workflow feeds both to esptool merge-bin, so
+# the merged image always matches this build rather than values duplicated in
+# the workflow that can drift out of step with platformio.ini.
 
 Import("env")
 import os
@@ -27,6 +28,18 @@ def dump_flash_images(source, target, env):
     with open(os.path.join(build_dir, "flash_images.txt"), "w", newline="\n") as f:
         for offset, path in rows:
             f.write("%s %s\n" % (offset, path))
+
+    board = env.BoardConfig()
+    mode = env.subst("$BOARD_FLASH_MODE") or board.get("build.flash_mode", "dio")
+    size = board.get("upload.flash_size", "4MB")
+
+    # BOARD_F_FLASH comes through as "80000000L", esptool wants "80m"
+    freq = env.subst("$BOARD_F_FLASH") or str(board.get("build.f_flash", "40000000L"))
+    digits = "".join(c for c in freq if c.isdigit())
+    freq = "%dm" % (int(digits) // 1000000) if digits else "40m"
+
+    with open(os.path.join(build_dir, "flash_params.txt"), "w", newline="\n") as f:
+        f.write("mode %s\nfreq %s\nsize %s\n" % (mode, freq, size))
 
 
 env.AddPostAction("$BUILD_DIR/${PROGNAME}.bin", dump_flash_images)

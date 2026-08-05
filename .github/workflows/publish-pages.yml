@@ -1,0 +1,98 @@
+name: Publish Pages
+
+# Runs when a release is published, not when it is drafted, so the flashing site
+# never offers firmware that is not yet downloadable from the releases page.
+# Binaries are taken from the release rather than rebuilt, so the site serves
+# exactly the bytes the release was verified with.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to publish to the site
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: gh-pages
+  cancel-in-progress: false
+
+env:
+  # versioned firmware directories kept on gh-pages, older ones are pruned
+  KEEP_VERSIONS: 5
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Resolve tag
+        run: echo "TAG=${{ github.event.release.tag_name || inputs.tag }}" >> "$GITHUB_ENV"
+
+      # site source is taken from the tag, so the page always matches the release
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+
+      - name: Download release binaries
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern '*.bin' --dir dist
+          for n in UMi17 SA-17M; do
+            test -s "dist/OnStepX-${TAG}-${n}.bin" || { echo "missing binary for $n"; exit 1; }
+          done
+          ls -l dist
+
+      - name: Publish site and binaries to gh-pages
+        run: |
+          set -euo pipefail
+          SITE="$PWD/pages"
+          DIST="$PWD/dist"
+
+          rm -rf _ghpages && mkdir _ghpages && cd _ghpages
+          git init -q
+          git remote add origin "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git"
+          if git fetch -q --depth 1 origin gh-pages 2>/dev/null; then
+            git checkout -q FETCH_HEAD
+            git checkout -q -B gh-pages
+          else
+            git checkout -q -b gh-pages
+          fi
+
+          # site source lives in pages/ on the release branch and is republished
+          # every release, the manifests get the version stamped in on the way out
+          cp "$SITE/index.html" .
+          for m in "$SITE"/manifest-*.json; do
+            sed "s/__VERSION__/${TAG}/" "$m" > "$(basename "$m")"
+          done
+          touch .nojekyll
+
+          # manifests always point at firmware/latest, so they never need editing
+          # when a new version ships, while the versioned copy stays for history
+          mkdir -p "firmware/${TAG}" firmware/latest
+          cp "$DIST"/*.bin "firmware/${TAG}/"
+          cp "$DIST/OnStepX-${TAG}-UMi17.bin"  firmware/latest/UMi17.bin
+          cp "$DIST/OnStepX-${TAG}-SA-17M.bin" firmware/latest/SA-17M.bin
+
+          # keep gh-pages from growing without bound, latest/ is never pruned
+          pruned=$(ls -1d firmware/V* 2>/dev/null | sort -V | head -n -"${KEEP_VERSIONS}" || true)
+          if [ -n "$pruned" ]; then
+            echo "pruning older firmware:"; echo "$pruned"
+            echo "$pruned" | xargs -r rm -rf
+          fi
+
+          git add -A
+          if git diff --cached --quiet; then
+            echo "nothing changed, skipping push"
+            exit 0
+          fi
+          git -c user.name='github-actions[bot]' \
+              -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+              commit -q -m "Site and firmware ${TAG}"
+          git push -q origin gh-pages
