@@ -1,6 +1,7 @@
 {
   "name": "OnStepX SA-17M",
   "version": "V3.0.0",
+  "new_install_improv_wait_time": 0,
   "builds": [
     {
       "chipFamily": "ESP32",
