@@ -312,6 +312,52 @@
     }, true));
   })();
 
+  // Works around an esp-web-tools bug. Starting an install closes the port, and
+  // when a flash fails their Back handler runs
+  //     this._initialize(), this._state = "DASHBOARD"
+  // without awaiting. _initialize() synchronously sets state ERROR because the
+  // port is not readable, the comma expression immediately overwrites that with
+  // DASHBOARD, willUpdate then clears the error, and render falls back to
+  // "Connecting" forever because _client was left undefined. Reopening the port
+  // and awaiting properly turns that dead end into either a working dashboard or
+  // a real error message. Only fires when the port is actually unusable, so a
+  // normal Back is untouched. Anything unexpected falls back to a reload, which
+  // always releases the port.
+  (() => {
+    const onClick = e => {
+      const dlg = document.querySelector('ewt-install-dialog');
+      if (!dlg || !dlg.port) return;
+
+      const btn = e.composedPath().find(n => n.tagName === 'EW-TEXT-BUTTON');
+      if (!btn || (btn.textContent || '').trim() !== 'Back') return;
+
+      const port = dlg.port;
+      if (port.readable && port.writable) return;   // their Back works fine here
+
+      e.stopImmediatePropagation();
+      e.preventDefault();
+
+      (async () => {
+        try {
+          if (!port.readable) await port.open({ baudRate: 115200, bufferSize: 8192 });
+          await dlg._initialize();
+          if (dlg._state !== 'ERROR') dlg._state = 'DASHBOARD';
+          dlg.requestUpdate();
+        } catch (err) {
+          location.reload();
+        }
+      })();
+    };
+
+    new MutationObserver(() => {
+      const dlg = document.querySelector('ewt-install-dialog');
+      if (dlg && dlg.shadowRoot && !dlg.__backPatched) {
+        dlg.__backPatched = true;
+        dlg.shadowRoot.addEventListener('click', onClick, true);
+      }
+    }).observe(document.body, { childList: true, subtree: true });
+  })();
+
   // ---- serial plumbing -----------------------------------------------------
   // OnStep replies are either terminated with '#', or a bare '0'/'1', or absent
   // entirely, so a read waits for '#' and otherwise falls back to the timeout.
