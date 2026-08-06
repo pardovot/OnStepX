@@ -32,10 +32,14 @@ jobs:
       - name: Resolve tag
         run: echo "TAG=${{ github.event.release.tag_name || inputs.tag }}" >> "$GITHUB_ENV"
 
-      # site source is taken from the tag, so the page always matches the release
+      # Site source comes from the default branch, not the tag, so a fix to the
+      # page can ship by re-running this workflow instead of needing a new
+      # version. The firmware still comes from the release below, which is the
+      # part that has to match the tag. Naming the ref explicitly matters: on a
+      # release event the default checkout ref is the tag's own commit.
       - uses: actions/checkout@v4
         with:
-          ref: ${{ env.TAG }}
+          ref: ${{ github.event.repository.default_branch }}
 
       - name: Download release binaries
         env:
