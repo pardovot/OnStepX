@@ -124,6 +124,14 @@
     border: 1px solid var(--line); border-left-width: 4px; border-radius: 6px;
     background: var(--card); padding: .85rem 1rem; margin: 1rem 0; font-size: .93rem;
   }
+  .gate {
+    display: flex; gap: .65rem; align-items: flex-start; cursor: pointer;
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 8px; padding: .85rem 1rem; margin: 1rem 0;
+  }
+  .gate input { margin-top: .2rem; width: 1.05rem; height: 1.05rem; flex: none; cursor: pointer; }
+  .gate small { display: block; color: var(--muted); margin-top: .2rem; }
+
   .result.pass { border-color: var(--umi); }
   .result.fail { border-color: #d05252; }
   .result strong { display: block; margin-bottom: .25rem; }
@@ -155,6 +163,13 @@
   </div>
 
   <h2>Choose your mount</h2>
+
+  <label class="gate">
+    <input type="checkbox" id="homed-ack">
+    <span>The mount is parked or at its home position.
+    <small>The firmware anchors its absolute position to home on the first boot after
+    flashing. Confirming this is the one thing worth checking before you start.</small></span>
+  </label>
 
   <div class="mounts">
     <div class="mount umi">
@@ -274,6 +289,16 @@
     document.getElementById('serial-unsupported').hidden = false;
     document.getElementById('connect').disabled = true;
   }
+
+  // install is gated on the mount being at home, since the firmware anchors its
+  // absolute position there on first boot and cannot tell if it is wrong
+  (() => {
+    const ack = document.getElementById('homed-ack');
+    const buttons = document.querySelectorAll('.mount button.install');
+    const sync = () => buttons.forEach(b => b.disabled = !ack.checked);
+    ack.addEventListener('change', sync);
+    sync();
+  })();
 
   // ---- serial plumbing -----------------------------------------------------
   // OnStep replies are either terminated with '#', or a bare '0'/'1', or absent
