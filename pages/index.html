@@ -262,12 +262,9 @@
   use a CP2102 or CH340 chip, both have drivers available from their vendors.</p>
 
   <div class="note">
-    <p><strong>If it says "Failed to initialize"</strong>, close the dialog
-    entirely rather than using its Back button, then click Install again. Back
-    leaves the installer stuck on "connecting", closing it releases the serial
-    port properly.</p>
-    <p>If it keeps failing, hold the BOOT button on the controller while clicking
-    Install.</p>
+    <p><strong>If it says "Failed to initialize"</strong>, the installer could not
+    reach the controller's bootloader. Hold the BOOT button on the controller
+    while clicking Install, then release it once the progress bar appears.</p>
   </div>
 
   <h2 id="manual">Manual flashing</h2>
