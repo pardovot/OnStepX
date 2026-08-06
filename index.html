@@ -261,6 +261,15 @@
   <p>If no port appears, the USB serial driver is probably missing. These boards
   use a CP2102 or CH340 chip, both have drivers available from their vendors.</p>
 
+  <div class="note">
+    <p><strong>If it says "Failed to initialize"</strong>, close the dialog
+    entirely rather than using its Back button, then click Install again. Back
+    leaves the installer stuck on "connecting", closing it releases the serial
+    port properly.</p>
+    <p>If it keeps failing, hold the BOOT button on the controller while clicking
+    Install.</p>
+  </div>
+
   <h2 id="manual">Manual flashing</h2>
   <p>For Firefox, Safari, or any machine where browser flashing is not an option,
   download the firmware for your mount from the
@@ -298,6 +307,12 @@
     const sync = () => buttons.forEach(b => b.disabled = !ack.checked);
     ack.addEventListener('change', sync);
     sync();
+
+    // the console below and the installer cannot both hold the serial port, and
+    // the installer's failure path does not recover, so hand the port over first
+    buttons.forEach(b => b.addEventListener('click', () => {
+      if (port) disconnect();
+    }, true));
   })();
 
   // ---- serial plumbing -----------------------------------------------------
