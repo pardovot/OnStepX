@@ -315,49 +315,6 @@
     }, true));
   })();
 
-  // ESP Web Tools force erases on a first install and says "All data on the
-  // device will be erased." Here that reads as though the mount configuration is
-  // lost, but settings live on the FRAM chip and no flash erase reaches them, so
-  // the line is dropped. If their wording changes this simply stops matching.
-  (() => {
-    const LINE = 'All data on the device will be erased.';
-
-    const strip = root => {
-      if (!root) return;
-      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-      const hits = [];
-      while (walker.nextNode()) {
-        if (walker.currentNode.nodeValue.includes(LINE)) hits.push(walker.currentNode);
-      }
-      for (const node of hits) {
-        node.nodeValue = node.nodeValue.replace(LINE, '');
-        // drop the two <br> the template puts in front of it
-        for (let i = 0; i < 2; i++) {
-          const prev = node.previousSibling;
-          if (prev && prev.nodeName === 'BR') prev.remove(); else break;
-        }
-      }
-      root.querySelectorAll && root.querySelectorAll('*').forEach(el => {
-        if (el.shadowRoot) strip(el.shadowRoot);
-      });
-    };
-
-    let timer = null;
-    new MutationObserver(() => {
-      const dialog = document.querySelector('ewt-install-dialog');
-      if (dialog && !timer) {
-        // the text appears on a later render inside nested shadow roots, so keep
-        // checking while the dialog is up rather than trying to observe them all
-        timer = setInterval(() => {
-          if (!document.querySelector('ewt-install-dialog')) {
-            clearInterval(timer); timer = null; return;
-          }
-          strip(dialog.shadowRoot);
-        }, 150);
-      }
-    }).observe(document.body, { childList: true, subtree: true });
-  })();
-
   // ---- serial plumbing -----------------------------------------------------
   // OnStep replies are either terminated with '#', or a bare '0'/'1', or absent
   // entirely, so a read waits for '#' and otherwise falls back to the timeout.
