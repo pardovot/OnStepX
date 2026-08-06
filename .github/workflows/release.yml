@@ -120,10 +120,25 @@ jobs:
           (cd dist && sha256sum -- *.bin *.zip > SHA256SUMS.txt)
           ls -l dist
 
+      # one artifact per mount, so the download is named for the mount it belongs
+      # to and cannot contain the other mount's firmware
       - uses: actions/upload-artifact@v4
         with:
-          name: firmware-${{ env.VERSION }}
-          path: dist/
+          name: OnStepX-${{ env.VERSION }}-UMi17
+          path: |
+            dist/*-UMi17.bin
+            dist/*-parts-UMi17.zip
+            dist/SHA256SUMS.txt
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OnStepX-${{ env.VERSION }}-SA-17M
+          path: |
+            dist/*-SA-17M.bin
+            dist/*-parts-SA-17M.zip
+            dist/SHA256SUMS.txt
+          if-no-files-found: error
 
       # Draft, so nothing is announced until the notes are written. Publishing the
       # draft triggers publish-pages.yml, which is what puts the firmware on the
