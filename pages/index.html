@@ -82,6 +82,51 @@
   }
   a { color: inherit; }
   footer { margin-top: 3rem; color: var(--muted); font-size: .88rem; }
+
+  h3 { font-size: .98rem; margin: 1.75rem 0 .5rem; }
+  .btn {
+    font: inherit; font-weight: 600; cursor: pointer;
+    background: var(--ink); color: var(--bg); border: 1px solid var(--ink);
+    border-radius: 6px; padding: .45rem 1rem;
+  }
+  .btn:hover:not(:disabled) { opacity: .85; }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
+  .btn.ghost { background: transparent; color: var(--ink); }
+
+  .conn { display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; margin: 1rem 0; }
+  .conn-state { color: var(--muted); font-size: .9rem; }
+  .conn-state.on { color: var(--umi); font-weight: 600; }
+
+  .cmds { display: flex; flex-wrap: wrap; gap: .4rem; margin: .6rem 0; }
+  .cmds button {
+    font: inherit; font-size: .85rem; cursor: pointer;
+    background: var(--card); color: var(--ink);
+    border: 1px solid var(--line); border-radius: 5px; padding: .3rem .6rem;
+  }
+  .cmds button:hover:not(:disabled) { border-color: var(--ink); }
+  .cmds button:disabled { opacity: .4; cursor: not-allowed; }
+  .cmds button code { background: none; border: 0; padding: 0; font-size: .95em; }
+
+  .send { display: flex; gap: .5rem; margin: 1rem 0 .6rem; }
+  .send input {
+    font: inherit; flex: 1; min-width: 0;
+    background: var(--card); color: var(--ink);
+    border: 1px solid var(--line); border-radius: 6px; padding: .45rem .7rem;
+  }
+
+  .log {
+    background: var(--card); border: 1px solid var(--line); border-radius: 6px;
+    padding: .8rem; margin: 0; max-height: 20rem; overflow: auto;
+    font-size: .85rem; line-height: 1.45; white-space: pre-wrap; word-break: break-word;
+    color: var(--muted);
+  }
+  .result {
+    border: 1px solid var(--line); border-left-width: 4px; border-radius: 6px;
+    background: var(--card); padding: .85rem 1rem; margin: 1rem 0; font-size: .93rem;
+  }
+  .result.pass { border-color: var(--umi); }
+  .result.fail { border-color: #d05252; }
+  .result strong { display: block; margin-bottom: .25rem; }
 </style>
 </head>
 <body>
@@ -147,6 +192,57 @@
     <li>Pick the controller's serial port in the browser prompt.</li>
     <li>Wait for erase, write and verify to finish, about a minute.</li>
   </ol>
+
+  <h2 id="tools">Tools</h2>
+
+  <p>These talk to a controller that is already running. Only one program can hold
+  the serial port at a time, so disconnect here before flashing, and close any
+  other software that is connected to the mount.</p>
+
+  <div class="conn">
+    <button class="btn" id="connect">Connect</button>
+    <button class="btn ghost" id="disconnect" disabled>Disconnect</button>
+    <span class="conn-state" id="conn-state">Not connected</span>
+  </div>
+  <p class="slot-msg" id="serial-unsupported" hidden>
+    This browser cannot open serial ports. Use desktop Chrome, Edge or Opera.
+  </p>
+
+  <h3>Is the FRAM working?</h3>
+
+  <p>The mount saves its position to FRAM every second. If the chip is not wired
+  correctly the firmware still runs, so the failure is easy to miss until settings
+  start disappearing. This test writes a value, reboots the controller, and reads
+  it back, which is the only way to prove it actually persisted.</p>
+
+  <div class="note warn">
+    <p><strong>This reboots the mount.</strong> Do not run it while slewing or
+    imaging. The drift threshold is changed during the test and put back
+    afterwards.</p>
+  </div>
+
+  <button class="btn" id="fram-test" disabled>Run FRAM test</button>
+  <div class="result" id="fram-result" hidden></div>
+
+  <h3>Serial console</h3>
+
+  <p>Commands follow the OnStep protocol, so they start with <code>:</code> and end
+  with <code>#</code>. Some return a value, some return <code>0</code> or
+  <code>1</code>, and some return nothing at all.</p>
+
+  <div class="cmds" id="cmd-buttons"></div>
+
+  <div class="note warn">
+    <p><strong>These two change or lose state.</strong></p>
+    <div class="cmds" id="cmd-buttons-danger"></div>
+  </div>
+
+  <form class="send" id="send-form">
+    <input id="cmd-input" type="text" placeholder=":GVN#" autocomplete="off" spellcheck="false">
+    <button class="btn" type="submit" id="send-btn" disabled>Send</button>
+  </form>
+
+  <pre class="log" id="log">Not connected.</pre>
   <p>If no port appears, the USB serial driver is probably missing. These boards
   use a CP2102 or CH340 chip, both have drivers available from their vendors.</p>
 
@@ -175,7 +271,205 @@
 <script>
   if (!('serial' in navigator)) {
     document.getElementById('browser-check').hidden = false;
+    document.getElementById('serial-unsupported').hidden = false;
+    document.getElementById('connect').disabled = true;
   }
+
+  // ---- serial plumbing -----------------------------------------------------
+  // OnStep replies are either terminated with '#', or a bare '0'/'1', or absent
+  // entirely, so a read waits for '#' and otherwise falls back to the timeout.
+
+  const BAUD = 9600;
+  let port = null, reader = null, writer = null, rxBuffer = '', readLoop = null;
+
+  const $ = id => document.getElementById(id);
+  const logEl = $('log');
+
+  function log(line, prefix = '') {
+    if (logEl.textContent === 'Not connected.') logEl.textContent = '';
+    logEl.textContent += prefix + line + '\n';
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function setConnected(on) {
+    $('connect').disabled = on;
+    $('disconnect').disabled = !on;
+    $('send-btn').disabled = !on;
+    $('fram-test').disabled = !on;
+    document.querySelectorAll('.cmds button').forEach(b => b.disabled = !on);
+    const s = $('conn-state');
+    s.textContent = on ? 'Connected at ' + BAUD + ' baud' : 'Not connected';
+    s.classList.toggle('on', on);
+  }
+
+  async function startReadLoop() {
+    reader = port.readable.getReader();
+    const dec = new TextDecoder();
+    readLoop = (async () => {
+      try {
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          if (value) rxBuffer += dec.decode(value, { stream: true });
+        }
+      } catch (e) { /* closed or device reset, handled by callers */ }
+    })();
+  }
+
+  async function connect() {
+    try {
+      port = await navigator.serial.requestPort();
+      await port.open({ baudRate: BAUD });
+      writer = port.writable.getWriter();
+      await startReadLoop();
+      setConnected(true);
+      log('Connected.');
+      const v = await send(':GVP#');
+      const n = await send(':GVN#');
+      if (v || n) log('Firmware: ' + [v, n].filter(Boolean).join(' '));
+    } catch (e) {
+      log('Could not connect: ' + e.message);
+      await disconnect();
+    }
+  }
+
+  async function disconnect() {
+    try { if (reader) { await reader.cancel(); reader.releaseLock(); } } catch (e) {}
+    try { if (writer) writer.releaseLock(); } catch (e) {}
+    try { if (port) await port.close(); } catch (e) {}
+    reader = writer = port = null; rxBuffer = '';
+    setConnected(false);
+    log('Disconnected.');
+  }
+
+  // send a command and wait for a reply, '#' ends it early
+  async function send(cmd, timeout = 1500) {
+    if (!writer) return '';
+    rxBuffer = '';
+    await writer.write(new TextEncoder().encode(cmd));
+    const deadline = Date.now() + timeout;
+    while (Date.now() < deadline) {
+      if (rxBuffer.includes('#')) break;
+      await new Promise(r => setTimeout(r, 25));
+    }
+    const raw = rxBuffer;
+    rxBuffer = '';
+    return raw.replace(/#/g, '').trim();
+  }
+
+  async function sendAndLog(cmd) {
+    log(cmd, '> ');
+    const reply = await send(cmd);
+    log(reply === '' ? '(no reply)' : reply, '< ');
+    return reply;
+  }
+
+  // ---- command buttons -----------------------------------------------------
+
+  const COMMANDS = [
+    [':GVP#', 'Product'], [':GVN#', 'Version'],
+    [':GU#', 'Status'], [':GW#', 'Mount state'],
+    [':GR#', 'RA'], [':GD#', 'Dec'],
+    [':PAGr#', 'AMP status'], [':PAGp#', 'AMP position'], [':PAGd#', 'AMP drift'],
+    [':PAGt#', 'Drift thresh'], [':PAGe#', 'East limit'],
+    [':PAGw#', 'West limit'], [':PAGh#', 'Horizon limit'],
+  ];
+
+  const DANGER = [
+    [':ERESET#',   'Reboot controller',
+     'Reboot the controller now?'],
+    [':ENVRESET#', 'Clear all settings on next boot',
+     'This clears every stored setting on the next boot: site, limits, park and home positions, PEC, pointing model and saved objects. Continue?'],
+    [':PASz#',     'Re-anchor AMP to current position',
+     'Re-anchor the absolute motor position to wherever the mount is pointing right now?'],
+  ];
+
+  function addButtons(host, list, danger) {
+    list.forEach(([cmd, label, confirmMsg]) => {
+      const b = document.createElement('button');
+      b.disabled = true;
+      b.innerHTML = label + ' <code>' + cmd + '</code>';
+      b.onclick = async () => {
+        if (danger && !confirm(confirmMsg)) return;
+        await sendAndLog(cmd);
+      };
+      host.appendChild(b);
+    });
+  }
+  addButtons($('cmd-buttons'), COMMANDS, false);
+  addButtons($('cmd-buttons-danger'), DANGER, true);
+
+  $('connect').onclick = connect;
+  $('disconnect').onclick = disconnect;
+  $('send-form').onsubmit = async e => {
+    e.preventDefault();
+    const v = $('cmd-input').value.trim();
+    if (v) { $('cmd-input').value = ''; await sendAndLog(v); }
+  };
+
+  // ---- FRAM test -----------------------------------------------------------
+  // Reading a setting back over serial only proves the RAM copy changed, the
+  // getters do not re-read storage. Rebooting in between is what makes this a
+  // real test of whether the write reached the chip.
+
+  function showResult(pass, title, detail) {
+    const el = $('fram-result');
+    el.hidden = false;
+    el.className = 'result ' + (pass ? 'pass' : 'fail');
+    el.innerHTML = '<strong>' + title + '</strong>' + detail;
+  }
+
+  $('fram-test').onclick = async () => {
+    const btn = $('fram-test');
+    btn.disabled = true;
+    $('fram-result').hidden = true;
+    try {
+      const before = await sendAndLog(':PAGt#');
+      const orig = parseFloat(before);
+      if (isNaN(orig)) {
+        showResult(false, 'Could not read the drift threshold',
+          'The controller did not answer <code>:PAGt#</code>. Check it is powered, ' +
+          'running this firmware, and that nothing else holds the serial port.');
+        return;
+      }
+
+      const probe = (Math.abs(orig - 42) < 0.01) ? 37 : 42;
+      log('Writing ' + probe + ', rebooting, then reading it back.');
+      await sendAndLog(':PASt,' + probe + '#');
+      await sendAndLog(':ERESET#');
+
+      log('Waiting for the controller to come back...');
+      let after = '', deadline = Date.now() + 20000;
+      while (Date.now() < deadline) {
+        await new Promise(r => setTimeout(r, 1500));
+        after = await send(':PAGt#', 1200);
+        if (!isNaN(parseFloat(after))) break;
+      }
+
+      const got = parseFloat(after);
+      log('After reboot: ' + (after || '(no reply)'), '< ');
+
+      if (isNaN(got)) {
+        showResult(false, 'The controller did not answer after the reboot',
+          'It may still be starting up, or the USB port dropped. Reconnect and try again.');
+      } else if (Math.abs(got - probe) < 0.01) {
+        showResult(true, 'FRAM is working',
+          'Wrote ' + probe + ' deg, rebooted, and read ' + got + ' deg back. ' +
+          'The value survived a power cycle of the processor, so it really was ' +
+          'stored. Restoring your original setting of ' + orig + ' deg.');
+        await sendAndLog(':PASt,' + orig + '#');
+      } else {
+        showResult(false, 'The value did not persist',
+          'Wrote ' + probe + ' deg but read ' + got + ' deg after the reboot. ' +
+          'Writes are not reaching the FRAM. Check the four wires to the DS3231 ' +
+          'module: VCC, GND, SDA and SCL.');
+      }
+    } catch (e) {
+      showResult(false, 'Test failed', e.message);
+    } finally {
+      btn.disabled = !port;
+    }
+  };
 </script>
 </body>
 </html>
