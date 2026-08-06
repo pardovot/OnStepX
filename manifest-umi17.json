@@ -1,0 +1,13 @@
+{
+  "name": "OnStepX UMi17",
+  "version": "V3.0.0",
+  "new_install_prompt_erase": true,
+  "builds": [
+    {
+      "chipFamily": "ESP32",
+      "parts": [
+        { "path": "firmware/latest/UMi17.bin", "offset": 0 }
+      ]
+    }
+  ]
+}
