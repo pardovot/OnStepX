@@ -267,13 +267,22 @@
   <p>If no port appears, the USB serial driver is probably missing. These boards
   use a CP2102 or CH340 chip, both have drivers available from their vendors.</p>
 
-  <h3>Is the FRAM detected?</h3>
+  <h3>Is the FRAM working?</h3>
 
-  <p>At start-up the firmware addresses the FRAM over I2C. If the chip does not
-  answer it records a storage error, which this reads back. Nothing is written and
-  nothing is rebooted.</p>
+  <p><strong>Check</strong> reads back whether the firmware found the chip on I2C
+  at start-up. Instant, writes nothing, reboots nothing.</p>
 
-  <button class="btn" id="fram-check" disabled>Check FRAM</button>
+  <p><strong>Verify</strong> goes further and proves a write actually reached the
+  chip and survived a restart. It does the check first, then toggles the buzzer
+  setting, reboots, and confirms the new value came back, before putting it back
+  as it was. The buzzer is used precisely because it does not matter: if this is
+  interrupted the worst outcome is that the beep is left on or off.</p>
+
+  <div class="conn">
+    <button class="btn" id="fram-check" disabled>Check</button>
+    <button class="btn ghost" id="fram-verify" disabled>Verify read/write (reboots)</button>
+  </div>
+
   <div class="result" id="fram-result" hidden></div>
 
   <div class="note">
@@ -396,6 +405,7 @@
     $('disconnect').disabled = !on;
     $('send-btn').disabled = !on;
     $("fram-check").disabled = !on;
+    $("fram-verify").disabled = !on;
     document.querySelectorAll('.cmds button').forEach(b => b.disabled = !on);
     $('baud').disabled = on;
     const s = $('conn-state');
@@ -574,38 +584,93 @@
     el.innerHTML = '<strong>' + title + '</strong>' + detail;
   }
 
+  // returns {ok, code, name, status} for the boot time detection
+  async function framDetect() {
+    const status = await sendAndLog(':GU#');
+    if (!status) return { ok: false, code: null, name: 'no reply', status };
+    const code = status.charCodeAt(status.length - 1) - 48;
+    return { ok: code === 0, code, name: ERR_NAMES[code] || ('unknown code ' + code), status };
+  }
+
+  function reportDetect(d) {
+    if (d.code === null) {
+      showResult(false, 'No answer from the controller',
+        'It did not reply to <code>:GU#</code>. Check it is powered, running this ' +
+        'firmware, connected at 9600, and that nothing else holds the serial port.');
+    } else if (d.code === 15) {
+      showResult(false, 'FRAM not detected',
+        'The firmware reports a storage error, so the chip did not answer on I2C ' +
+        'at start-up. Check the four wires to the DS3231 module: VCC, GND, SDA ' +
+        'and SCL, and that it is an MB85RC256.');
+    } else if (d.code === 0) {
+      showResult(true, 'FRAM detected',
+        'The firmware addressed the FRAM at start-up and reports no errors at all.');
+    } else {
+      showResult(false, 'Cannot tell, another error is masking it',
+        'The controller reports <strong>' + d.name + '</strong>, which outranks the ' +
+        'storage error in the status it sends. Clear that first, then check again. ' +
+        'It does not mean the FRAM is faulty.');
+    }
+  }
+
   $('fram-check').onclick = async () => {
     const btn = $('fram-check');
     btn.disabled = true;
     $('fram-result').hidden = true;
+    try { reportDetect(await framDetect()); }
+    catch (e) { showResult(false, 'Check failed', e.message); }
+    finally { btn.disabled = !port; }
+  };
+
+  // Full verify. The buzzer setting is written to NV by :SX97 and read back from
+  // NV by Status::init(), and shows up as 'z' in :GU#, so toggling it across a
+  // reboot proves a write reached the chip. Detection runs first: a missing chip
+  // reads back as 0, which would look like a successful write to "off".
+  $('fram-verify').onclick = async () => {
+    const btn = $('fram-verify');
+    btn.disabled = true;
+    $('fram-result').hidden = true;
+    const buzzerOn = s => s.includes('z');
     try {
-      const status = await sendAndLog(':GU#');
-      if (!status) {
-        showResult(false, 'No answer from the controller',
-          'It did not reply to <code>:GU#</code>. Check it is powered, running this ' +
-          'firmware, connected at 9600, and that nothing else holds the serial port.');
+      const d = await framDetect();
+      if (!d.ok) { reportDetect(d); return; }
+
+      const was = buzzerOn(d.status);
+      const target = !was;
+      log('Buzzer is ' + (was ? 'on' : 'off') + ', setting it ' +
+          (target ? 'on' : 'off') + ' and rebooting.');
+      await sendAndLog(':SX97,' + (target ? 1 : 0) + '#');
+      await sendAndLog(':ERESET#');
+
+      log('Waiting for the controller to come back...');
+      let after = '', deadline = Date.now() + 20000;
+      while (Date.now() < deadline) {
+        await new Promise(r => setTimeout(r, 1500));
+        after = await send(':GU#', 1200);
+        if (after) break;
+      }
+
+      if (!after) {
+        showResult(false, 'The controller did not answer after the reboot',
+          'It may still be starting up, or the USB port dropped. Reconnect and try ' +
+          'again. The buzzer may have been left ' + (target ? 'on' : 'off') + '.');
         return;
       }
 
-      const code = status.charCodeAt(status.length - 1) - 48;
-      const name = ERR_NAMES[code] || ('unknown code ' + code);
-
-      if (code === 15) {
-        showResult(false, 'FRAM not detected',
-          'The firmware reports a storage error, so the chip did not answer on I2C ' +
-          'at start-up. Check the four wires to the DS3231 module: VCC, GND, SDA ' +
-          'and SCL, and that it is an MB85RC256.');
-      } else if (code === 0) {
-        showResult(true, 'FRAM detected',
-          'The firmware addressed the FRAM at start-up and reports no errors at all.');
+      if (buzzerOn(after) === target) {
+        showResult(true, 'FRAM reads and writes correctly',
+          'The buzzer setting was changed, the controller restarted, and the new ' +
+          'value came back. That means the write reached the chip and survived a ' +
+          'restart. Putting it back to ' + (was ? 'on' : 'off') + '.');
+        await sendAndLog(':SX97,' + (was ? 1 : 0) + '#');
       } else {
-        showResult(false, 'Cannot tell, another error is masking it',
-          'The controller reports <strong>' + name + '</strong>, which outranks the ' +
-          'storage error in the status it sends. Clear that first, then check again. ' +
-          'It does not mean the FRAM is faulty.');
+        showResult(false, 'The change did not survive the reboot',
+          'The chip answered on I2C but the new value was not there afterwards, so ' +
+          'writes are not sticking. The buzzer may have been left ' +
+          (target ? 'on' : 'off') + '.');
       }
     } catch (e) {
-      showResult(false, 'Check failed', e.message);
+      showResult(false, 'Verify failed', e.message);
     } finally {
       btn.disabled = !port;
     }
