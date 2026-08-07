@@ -1,0 +1,16 @@
+{
+  "name": "OnStepX UMi17 V2.0.0 (old release, testing only)",
+  "version": "V2.0.0",
+  "new_install_improv_wait_time": 0,
+  "builds": [
+    {
+      "chipFamily": "ESP32",
+      "parts": [
+        {
+          "path": "firmware/test/UMi17-V2.0.0.bin",
+          "offset": 0
+        }
+      ]
+    }
+  ]
+}
