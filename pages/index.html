@@ -219,6 +219,8 @@
   the serial port at a time, so disconnect here before flashing, and close any
   other software that is connected to the mount.</p>
 
+  <h3>Serial console</h3>
+
   <div class="conn">
     <button class="btn" id="connect">Connect</button>
     <button class="btn ghost" id="disconnect" disabled>Disconnect</button>
@@ -244,27 +246,10 @@
     This browser cannot open serial ports. Use desktop Chrome, Edge or Opera.
   </p>
 
-  <h3>Is the FRAM working?</h3>
-
-  <p>The mount saves its position to FRAM every second. If the chip is not wired
-  correctly the firmware still runs, so the failure is easy to miss until settings
-  start disappearing. This test writes a value, reboots the controller, and reads
-  it back, which is the only way to prove it actually persisted.</p>
-
-  <div class="note warn">
-    <p><strong>This reboots the mount.</strong> Do not run it while slewing or
-    imaging. The drift threshold is changed during the test and put back
-    afterwards.</p>
-  </div>
-
-  <button class="btn" id="fram-test" disabled>Run FRAM test</button>
-  <div class="result" id="fram-result" hidden></div>
-
-  <h3>Serial console</h3>
-
   <p>Commands follow the OnStep protocol, so they start with <code>:</code> and end
   with <code>#</code>. Some return a value, some return <code>0</code> or
-  <code>1</code>, and some return nothing at all.</p>
+  <code>1</code>, and some return nothing at all. The input remembers what you have
+  sent, so the up and down arrows step back through it.</p>
 
   <div class="cmds" id="cmd-buttons"></div>
 
@@ -281,6 +266,15 @@
   <pre class="log" id="log">Not connected.</pre>
   <p>If no port appears, the USB serial driver is probably missing. These boards
   use a CP2102 or CH340 chip, both have drivers available from their vendors.</p>
+
+  <h3>Is the FRAM detected?</h3>
+
+  <p>At start-up the firmware addresses the FRAM over I2C. If the chip does not
+  answer it records a storage error, which this reads back. Nothing is written and
+  nothing is rebooted.</p>
+
+  <button class="btn" id="fram-check" disabled>Check FRAM</button>
+  <div class="result" id="fram-result" hidden></div>
 
   <div class="note">
     <p><strong>If it says "Failed to initialize"</strong>, the installer could not
@@ -401,7 +395,7 @@
     $('connect').disabled = on;
     $('disconnect').disabled = !on;
     $('send-btn').disabled = !on;
-    $('fram-test').disabled = !on;
+    $("fram-check").disabled = !on;
     document.querySelectorAll('.cmds button').forEach(b => b.disabled = !on);
     $('baud').disabled = on;
     const s = $('conn-state');
@@ -527,16 +521,51 @@
 
   $('connect').onclick = connect;
   $('disconnect').onclick = disconnect;
+
+  // command history, newest last. cursor === history.length means "not browsing",
+  // and whatever was half typed is kept in draft so arrowing back down restores it
+  const history = [];
+  let cursor = 0, draft = '';
+
   $('send-form').onsubmit = async e => {
     e.preventDefault();
-    const v = $('cmd-input').value.trim();
-    if (v) { $('cmd-input').value = ''; await sendAndLog(v); }
+    const input = $('cmd-input');
+    const v = input.value.trim();
+    if (!v) return;
+    if (history[history.length - 1] !== v) history.push(v);
+    cursor = history.length;
+    draft = '';
+    input.value = '';
+    await sendAndLog(v);
   };
 
-  // ---- FRAM test -----------------------------------------------------------
-  // Reading a setting back over serial only proves the RAM copy changed, the
-  // getters do not re-read storage. Rebooting in between is what makes this a
-  // real test of whether the write reached the chip.
+  $('cmd-input').addEventListener('keydown', e => {
+    if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+    if (!history.length) return;
+    e.preventDefault();
+    const input = e.target;
+    if (e.key === 'ArrowUp') {
+      if (cursor === history.length) draft = input.value;
+      cursor = Math.max(0, cursor - 1);
+    } else {
+      cursor = Math.min(history.length, cursor + 1);
+    }
+    input.value = cursor === history.length ? draft : history[cursor];
+    // put the caret at the end rather than wherever it was
+    requestAnimationFrame(() => input.setSelectionRange(input.value.length, input.value.length));
+  });
+
+  // ---- FRAM check ----------------------------------------------------------
+  // At boot OnStepX.ino addresses the FRAM over I2C and sets nv.initError if it
+  // does not answer. That surfaces as error code 15 in the last character of the
+  // :GU# reply, so presence can be read without writing anything. It reports what
+  // the firmware found at start-up, not the state of the chip right now.
+
+  const ERR_NAMES = ['no error', 'motor fault', 'below horizon', 'limit switch',
+    'declination limit', 'azimuth limit', 'under pole', 'meridian limit', 'sync',
+    'park', 'goto/sync', 'unspecified', 'above overhead', 'weather sensor',
+    'site', 'storage (FRAM/NV)', 'AMP east limit', 'AMP west limit',
+    'AMP horizon limit'];
 
   function showResult(pass, title, detail) {
     const el = $('fram-result');
@@ -545,53 +574,38 @@
     el.innerHTML = '<strong>' + title + '</strong>' + detail;
   }
 
-  $('fram-test').onclick = async () => {
-    const btn = $('fram-test');
+  $('fram-check').onclick = async () => {
+    const btn = $('fram-check');
     btn.disabled = true;
     $('fram-result').hidden = true;
     try {
-      const before = await sendAndLog(':PAGt#');
-      const orig = parseFloat(before);
-      if (isNaN(orig)) {
-        showResult(false, 'Could not read the drift threshold',
-          'The controller did not answer <code>:PAGt#</code>. Check it is powered, ' +
-          'running this firmware, and that nothing else holds the serial port.');
+      const status = await sendAndLog(':GU#');
+      if (!status) {
+        showResult(false, 'No answer from the controller',
+          'It did not reply to <code>:GU#</code>. Check it is powered, running this ' +
+          'firmware, connected at 9600, and that nothing else holds the serial port.');
         return;
       }
 
-      const probe = (Math.abs(orig - 42) < 0.01) ? 37 : 42;
-      log('Writing ' + probe + ', rebooting, then reading it back.');
-      await sendAndLog(':PASt,' + probe + '#');
-      await sendAndLog(':ERESET#');
+      const code = status.charCodeAt(status.length - 1) - 48;
+      const name = ERR_NAMES[code] || ('unknown code ' + code);
 
-      log('Waiting for the controller to come back...');
-      let after = '', deadline = Date.now() + 20000;
-      while (Date.now() < deadline) {
-        await new Promise(r => setTimeout(r, 1500));
-        after = await send(':PAGt#', 1200);
-        if (!isNaN(parseFloat(after))) break;
-      }
-
-      const got = parseFloat(after);
-      log('After reboot: ' + (after || '(no reply)'), '< ');
-
-      if (isNaN(got)) {
-        showResult(false, 'The controller did not answer after the reboot',
-          'It may still be starting up, or the USB port dropped. Reconnect and try again.');
-      } else if (Math.abs(got - probe) < 0.01) {
-        showResult(true, 'FRAM is working',
-          'Wrote ' + probe + ' deg, rebooted, and read ' + got + ' deg back. ' +
-          'The value survived a power cycle of the processor, so it really was ' +
-          'stored. Restoring your original setting of ' + orig + ' deg.');
-        await sendAndLog(':PASt,' + orig + '#');
+      if (code === 15) {
+        showResult(false, 'FRAM not detected',
+          'The firmware reports a storage error, so the chip did not answer on I2C ' +
+          'at start-up. Check the four wires to the DS3231 module: VCC, GND, SDA ' +
+          'and SCL, and that it is an MB85RC256.');
+      } else if (code === 0) {
+        showResult(true, 'FRAM detected',
+          'The firmware addressed the FRAM at start-up and reports no errors at all.');
       } else {
-        showResult(false, 'The value did not persist',
-          'Wrote ' + probe + ' deg but read ' + got + ' deg after the reboot. ' +
-          'Writes are not reaching the FRAM. Check the four wires to the DS3231 ' +
-          'module: VCC, GND, SDA and SCL.');
+        showResult(false, 'Cannot tell, another error is masking it',
+          'The controller reports <strong>' + name + '</strong>, which outranks the ' +
+          'storage error in the status it sends. Clear that first, then check again. ' +
+          'It does not mean the FRAM is faulty.');
       }
     } catch (e) {
-      showResult(false, 'Test failed', e.message);
+      showResult(false, 'Check failed', e.message);
     } finally {
       btn.disabled = !port;
     }
