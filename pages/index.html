@@ -96,6 +96,11 @@
   .conn { display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; margin: 1rem 0; }
   .conn-state { color: var(--muted); font-size: .9rem; }
   .conn-state.on { color: var(--umi); font-weight: 600; }
+  .baud { color: var(--muted); font-size: .9rem; display: flex; align-items: center; gap: .35rem; }
+  .baud select {
+    font: inherit; font-size: .9rem; color: var(--ink); background: var(--card);
+    border: 1px solid var(--line); border-radius: 5px; padding: .3rem .4rem;
+  }
 
   .cmds { display: flex; flex-wrap: wrap; gap: .4rem; margin: .6rem 0; }
   .cmds button {
@@ -217,8 +222,24 @@
   <div class="conn">
     <button class="btn" id="connect">Connect</button>
     <button class="btn ghost" id="disconnect" disabled>Disconnect</button>
+    <label class="baud">
+      Baud
+      <select id="baud">
+        <option value="9600" selected>9600 (firmware)</option>
+        <option value="115200">115200 (boot messages)</option>
+        <option value="74880">74880</option>
+        <option value="57600">57600</option>
+        <option value="38400">38400</option>
+        <option value="19200">19200</option>
+        <option value="230400">230400</option>
+      </select>
+    </label>
     <span class="conn-state" id="conn-state">Not connected</span>
   </div>
+
+  <p class="slot-msg">The firmware talks at 9600. The ESP32's own start-up
+  messages are printed at 115200, so if the controller is not booting, connect at
+  115200 and press its reset button to read why.</p>
   <p class="slot-msg" id="serial-unsupported" hidden>
     This browser cannot open serial ports. Use desktop Chrome, Edge or Opera.
   </p>
@@ -362,7 +383,9 @@
   // OnStep replies are either terminated with '#', or a bare '0'/'1', or absent
   // entirely, so a read waits for '#' and otherwise falls back to the timeout.
 
-  const BAUD = 9600;
+  const FIRMWARE_BAUD = 9600;
+  let baud = FIRMWARE_BAUD;
+  let awaitingReply = false;
   let port = null, reader = null, writer = null, rxBuffer = '', readLoop = null;
 
   const $ = id => document.getElementById(id);
@@ -380,8 +403,9 @@
     $('send-btn').disabled = !on;
     $('fram-test').disabled = !on;
     document.querySelectorAll('.cmds button').forEach(b => b.disabled = !on);
+    $('baud').disabled = on;
     const s = $('conn-state');
-    s.textContent = on ? 'Connected at ' + BAUD + ' baud' : 'Not connected';
+    s.textContent = on ? 'Connected at ' + baud + ' baud' : 'Not connected';
     s.classList.toggle('on', on);
   }
 
@@ -393,7 +417,14 @@
         while (true) {
           const { value, done } = await reader.read();
           if (done) break;
-          if (value) rxBuffer += dec.decode(value, { stream: true });
+          if (!value) continue;
+          rxBuffer += dec.decode(value, { stream: true });
+          // nothing is waiting on a reply, so this is unsolicited output such as
+          // the controller's boot log. Show it instead of silently buffering.
+          if (!awaitingReply) {
+            const text = rxBuffer; rxBuffer = '';
+            if (text) log(text.replace(/\r/g, ''), '  ');
+          }
         }
       } catch (e) { /* closed or device reset, handled by callers */ }
     })();
@@ -401,12 +432,19 @@
 
   async function connect() {
     try {
+      baud = parseInt($('baud').value, 10) || FIRMWARE_BAUD;
       port = await navigator.serial.requestPort();
-      await port.open({ baudRate: BAUD });
+      await port.open({ baudRate: baud });
       writer = port.writable.getWriter();
       await startReadLoop();
       setConnected(true);
-      log('Connected.');
+      log('Connected at ' + baud + ' baud.');
+      if (baud !== FIRMWARE_BAUD) {
+        // at any other rate the firmware's replies are unreadable, so do not
+        // probe it, just listen. Reset the controller to capture its boot log.
+        log('Listening only. Press the reset button on the controller to see its start-up messages.');
+        return;
+      }
       const v = await send(':GVP#');
       const n = await send(':GVN#');
       if (v || n) log('Firmware: ' + [v, n].filter(Boolean).join(' '));
@@ -428,16 +466,21 @@
   // send a command and wait for a reply, '#' ends it early
   async function send(cmd, timeout = 1500) {
     if (!writer) return '';
+    awaitingReply = true;
     rxBuffer = '';
-    await writer.write(new TextEncoder().encode(cmd));
-    const deadline = Date.now() + timeout;
-    while (Date.now() < deadline) {
-      if (rxBuffer.includes('#')) break;
-      await new Promise(r => setTimeout(r, 25));
+    try {
+      await writer.write(new TextEncoder().encode(cmd));
+      const deadline = Date.now() + timeout;
+      while (Date.now() < deadline) {
+        if (rxBuffer.includes('#')) break;
+        await new Promise(r => setTimeout(r, 25));
+      }
+      const raw = rxBuffer;
+      rxBuffer = '';
+      return raw.replace(/#/g, '').trim();
+    } finally {
+      awaitingReply = false;
     }
-    const raw = rxBuffer;
-    rxBuffer = '';
-    return raw.replace(/#/g, '').trim();
   }
 
   async function sendAndLog(cmd) {
