@@ -109,38 +109,45 @@
     </div>
   </div>
 
-  <h2>Flash frequency test</h2>
+  <h2>Flash mode test</h2>
 
   <div class="note">
-    <p>V1 boots, V2 and V3 produce garbled serial output. The one thing that
-    separates them is the flash frequency in the bootloader header: V1 is
-    <code>40MHz</code>, V2 and V3 are <code>80MHz</code>.</p>
-    <p>These two are the same firmware as above, rebuilt at <code>40MHz</code>.
-    Nothing else changed &mdash; for V2 it is 33 bytes, the frequency nibble plus
-    the recalculated SHA. If these boot and the console is readable, the flash
-    chip on this board cannot run at 80MHz.</p>
+    <p>The boot log shows the second stage bootloader reading a corrupt segment
+    header (<code>load:0x1758a7fc,len:330433832</code>) and the RTC watchdog
+    resetting the chip. That is a flash <em>read</em> failure, not a firmware
+    fault.</p>
+    <p>Every image that boots on this board is <code>dio</code>. V3 is built
+    <code>qio</code>, which needs the flash chip's WP and HOLD pins wired as data
+    lines. These are the same V3 firmware rebuilt in <code>dio</code>. Try
+    <strong>40MHz first</strong>, since that is what V1 uses.</p>
   </div>
 
   <div class="builds">
     <div class="build">
-      <h3>V2.0.0 @ 40MHz</h3>
-      <p>same firmware, 40MHz</p>
-      <esp-web-install-button manifest="manifest-test-v2-40m.json">
-        <button class="install" slot="activate" disabled>Install V2 @ 40MHz</button>
+      <h3>V3 dio @ 40MHz</h3>
+      <p>same settings as V1</p>
+      <esp-web-install-button manifest="manifest-test-v3-dio-40m.json">
+        <button class="install" slot="activate" disabled>Install V3 dio 40MHz</button>
         <span class="slot-msg" slot="unsupported">Not supported in this browser</span>
         <span class="slot-msg" slot="not-allowed">Must be served over HTTPS</span>
       </esp-web-install-button>
     </div>
 
     <div class="build">
-      <h3>V3.0.0 @ 40MHz</h3>
-      <p>current firmware, 40MHz</p>
-      <esp-web-install-button manifest="manifest-test-v3-40m.json">
-        <button class="install" slot="activate" disabled>Install V3 @ 40MHz</button>
+      <h3>V3 dio @ 80MHz</h3>
+      <p>if 40MHz works, try this next</p>
+      <esp-web-install-button manifest="manifest-test-v3-dio-80m.json">
+        <button class="install" slot="activate" disabled>Install V3 dio 80MHz</button>
         <span class="slot-msg" slot="unsupported">Not supported in this browser</span>
         <span class="slot-msg" slot="not-allowed">Must be served over HTTPS</span>
       </esp-web-install-button>
     </div>
+  </div>
+
+  <div class="note">
+    <p>Also available if needed: <code>manifest-test-v2-40m.json</code> (V2 dio
+    40MHz) and <code>manifest-test-v3-40m.json</code> (V3 qio 40MHz, expected to
+    fail the same way).</p>
   </div>
 
   <h2>Testing the upgrade path</h2>

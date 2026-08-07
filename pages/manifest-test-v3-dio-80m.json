@@ -1,0 +1,16 @@
+{
+  "name": "OnStepX UMi17 V3.0.0 dio 80MHz (test)",
+  "version": "test",
+  "new_install_improv_wait_time": 0,
+  "builds": [
+    {
+      "chipFamily": "ESP32",
+      "parts": [
+        {
+          "path": "firmware/test/UMi17-V3.0.0-dio-80m.bin",
+          "offset": 0
+        }
+      ]
+    }
+  ]
+}
