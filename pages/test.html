@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>OnStepX - old releases (testing)</title>
+<script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js"></script>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #fff; --ink: #1b1f24; --muted: #5b6570; --line: #d8dee4;
+    --warn-bg: #fff4f4; --warn-line: #d05252; --old: #8a6d1f;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14171a; --card: #1c2126; --ink: #e8eaed; --muted: #9aa4b0; --line: #2e353d;
+      --warn-bg: #2b1a1a; --warn-line: #a04a4a; --old: #d0ab46;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 2rem 1rem 4rem; background: var(--bg); color: var(--ink);
+    font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  .wrap { max-width: 720px; margin: 0 auto; }
+  h1 { font-size: 1.5rem; margin: 0 0 .35rem; }
+  .sub { color: var(--muted); margin: 0 0 1.5rem; }
+  h2 { font-size: 1rem; margin: 2rem 0 .6rem; }
+  .note {
+    border: 1px solid var(--line); border-left-width: 4px; background: var(--card);
+    border-radius: 6px; padding: .85rem 1rem; margin: 1rem 0;
+  }
+  .note.warn { background: var(--warn-bg); border-color: var(--warn-line); }
+  .note p { margin: .4rem 0; }
+  .note p:first-child { margin-top: 0; }
+  .note p:last-child { margin-bottom: 0; }
+  .builds { display: grid; gap: 1rem; grid-template-columns: 1fr 1fr; }
+  @media (max-width: 600px) { .builds { grid-template-columns: 1fr; } }
+  .build {
+    background: var(--card); border: 1px solid var(--line); border-top: 4px solid var(--old);
+    border-radius: 8px; padding: 1.1rem; text-align: center;
+  }
+  .build h3 { margin: 0 0 .15rem; font-size: 1.2rem; }
+  .build p { color: var(--muted); font-size: .85rem; margin: 0 0 .9rem; }
+  button.install {
+    font: inherit; font-weight: 600; cursor: pointer; width: 100%;
+    background: var(--old); color: #fff; border: 0; border-radius: 6px; padding: .6rem 1.2rem;
+  }
+  button.install:hover:not(:disabled) { filter: brightness(1.08); }
+  button.install:disabled { opacity: .45; cursor: not-allowed; }
+  .slot-msg { display: block; color: var(--muted); font-size: .85rem; }
+  .gate {
+    display: flex; gap: .65rem; align-items: flex-start; cursor: pointer;
+    background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+    padding: .85rem 1rem; margin: 1rem 0;
+  }
+  .gate input { margin-top: .2rem; width: 1.05rem; height: 1.05rem; flex: none; cursor: pointer; }
+  code { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: .1rem .35rem; font-size: .9em; }
+  a { color: inherit; }
+  footer { margin-top: 2.5rem; color: var(--muted); font-size: .85rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Old releases</h1>
+  <p class="sub">Not linked from anywhere. For testing upgrade paths.</p>
+
+  <div class="note warn">
+    <p><strong>These are superseded builds. Do not use them to run a mount.</strong>
+    They have no absolute motor position, so none of the cable wrap or horizon
+    protection exists, and the meridian flip behaves differently.</p>
+    <p>When you are done, go back to
+    <a href="./">the current firmware</a> and install V3.</p>
+  </div>
+
+  <div class="note">
+    <p>Both are UMi17 only, rebuilt from the original release assets into a single
+    image. Their flash mode and frequency were preserved rather than forced to
+    match V3, so they run exactly as they originally shipped.</p>
+  </div>
+
+  <label class="gate">
+    <input type="checkbox" id="ack">
+    <span>I understand this installs old firmware for testing.</span>
+  </label>
+
+  <h2>Install</h2>
+
+  <div class="builds">
+    <div class="build">
+      <h3>V1.0.0</h3>
+      <p>initial test release</p>
+      <esp-web-install-button manifest="manifest-test-v1.json">
+        <button class="install" slot="activate" disabled>Install V1.0.0</button>
+        <span class="slot-msg" slot="unsupported">Not supported in this browser</span>
+        <span class="slot-msg" slot="not-allowed">Must be served over HTTPS</span>
+      </esp-web-install-button>
+    </div>
+
+    <div class="build">
+      <h3>V2.0.0</h3>
+      <p>I2C FRAM</p>
+      <esp-web-install-button manifest="manifest-test-v2.json">
+        <button class="install" slot="activate" disabled>Install V2.0.0</button>
+        <span class="slot-msg" slot="unsupported">Not supported in this browser</span>
+        <span class="slot-msg" slot="not-allowed">Must be served over HTTPS</span>
+      </esp-web-install-button>
+    </div>
+  </div>
+
+  <h2>Testing the upgrade path</h2>
+  <p>Installing one of these and then V3 from the main page exercises the two
+  things the V3 notes describe but that are otherwise hard to observe:</p>
+  <ol>
+    <li>Settings are wiped, because V3 stores them under a different key.</li>
+    <li>V3 anchors its absolute position to the home position on the first boot,
+    so park or home the mount before installing V3.</li>
+  </ol>
+  <p>Desktop Chrome, Edge or Opera. Firefox and Safari cannot talk to serial ports.</p>
+
+  <footer>
+    <p><a href="./">Back to the current firmware</a></p>
+  </footer>
+
+</div>
+
+<script>
+  (() => {
+    const ack = document.getElementById('ack');
+    const buttons = document.querySelectorAll('button.install');
+    const sync = () => buttons.forEach(b => b.disabled = !ack.checked);
+    ack.addEventListener('change', sync);
+    sync();
+  })();
+</script>
+</body>
+</html>

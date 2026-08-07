@@ -71,7 +71,7 @@ jobs:
 
           # site source lives in pages/ on the release branch and is republished
           # every release, the manifests get the version stamped in on the way out
-          cp "$SITE/index.html" .
+          cp "$SITE"/*.html .
           for m in "$SITE"/manifest-*.json; do
             sed "s/__VERSION__/${TAG}/" "$m" > "$(basename "$m")"
           done
