@@ -76,8 +76,8 @@
 
   <div class="note">
     <p>Both are UMi17 only, rebuilt from the original release assets into a single
-    image. Their flash mode and frequency were preserved rather than forced to
-    match V3, so they run exactly as they originally shipped.</p>
+    image flashed at <code>0x0</code>, in <code>dio</code> mode at
+    <code>40MHz</code>.</p>
   </div>
 
   <label class="gate">
@@ -107,47 +107,6 @@
         <span class="slot-msg" slot="not-allowed">Must be served over HTTPS</span>
       </esp-web-install-button>
     </div>
-  </div>
-
-  <h2>Flash mode test</h2>
-
-  <div class="note">
-    <p>The boot log shows the second stage bootloader reading a corrupt segment
-    header (<code>load:0x1758a7fc,len:330433832</code>) and the RTC watchdog
-    resetting the chip. That is a flash <em>read</em> failure, not a firmware
-    fault.</p>
-    <p>Every image that boots on this board is <code>dio</code>. V3 is built
-    <code>qio</code>, which needs the flash chip's WP and HOLD pins wired as data
-    lines. These are the same V3 firmware rebuilt in <code>dio</code>. Try
-    <strong>40MHz first</strong>, since that is what V1 uses.</p>
-  </div>
-
-  <div class="builds">
-    <div class="build">
-      <h3>V3 dio @ 40MHz</h3>
-      <p>same settings as V1</p>
-      <esp-web-install-button manifest="manifest-test-v3-dio-40m.json">
-        <button class="install" slot="activate" disabled>Install V3 dio 40MHz</button>
-        <span class="slot-msg" slot="unsupported">Not supported in this browser</span>
-        <span class="slot-msg" slot="not-allowed">Must be served over HTTPS</span>
-      </esp-web-install-button>
-    </div>
-
-    <div class="build">
-      <h3>V3 dio @ 80MHz</h3>
-      <p>if 40MHz works, try this next</p>
-      <esp-web-install-button manifest="manifest-test-v3-dio-80m.json">
-        <button class="install" slot="activate" disabled>Install V3 dio 80MHz</button>
-        <span class="slot-msg" slot="unsupported">Not supported in this browser</span>
-        <span class="slot-msg" slot="not-allowed">Must be served over HTTPS</span>
-      </esp-web-install-button>
-    </div>
-  </div>
-
-  <div class="note">
-    <p>Also available if needed: <code>manifest-test-v2-40m.json</code> (V2 dio
-    40MHz) and <code>manifest-test-v3-40m.json</code> (V3 qio 40MHz, expected to
-    fail the same way).</p>
   </div>
 
   <h2>Testing the upgrade path</h2>
